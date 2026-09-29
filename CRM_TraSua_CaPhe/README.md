@@ -1,14 +1,14 @@
-# CRM quản lý và chăm sóc khách hàng chuỗi trà sữa và cà phê
+# milktea-coffee — CRM quản lý và chăm sóc khách hàng
 
-Bộ phân tích và thiết kế cho đồ án HTTT. Mộc Trà là tên doanh nghiệp giả định trong dữ liệu demo.
+Bộ phân tích và thiết kế cho hệ thống **milktea-coffee**. Mộc Trà là tên doanh nghiệp giả định trong dữ liệu demo.
 
 ## Bộ bàn giao
 
 - `Bao_cao_Phan_tich_Thiet_ke_CRM.docx`: báo cáo chỉnh sửa được, gồm yêu cầu, phân quyền, quy tắc, DFD, ERD, use case, tuần tự, class, activity, trạng thái, kiến trúc, từ điển dữ liệu, API, kiểm thử và kế hoạch 15 tuần.
 - `Bo_so_do_CRM.pdf`: 25 sơ đồ và 4 trang diễn giải luồng DFD; thuận tiện mở riêng để thuyết trình.
 - `diagrams/`: 25 sơ đồ ở dạng PNG, SVG và nguồn `.puml` hoặc `.dot`; `manifest.json` có tiêu đề và giải thích.
-- `database/CRM_TraSua_CaPhe.dbml`: toàn bộ 11 bảng, enum, khóa và mối quan hệ; dán vào dbdiagram.io để xem ERD.
-- `database/`: SQL tạo CSDL, trigger, hàm nghiệp vụ, dữ liệu demo, 6 view, ví dụ sử dụng và kiểm tra.
+- `../database/CRM_TraSua_CaPhe.dbml`: toàn bộ 11 bảng, enum, khóa và mối quan hệ; dán vào dbdiagram.io để xem ERD.
+- `../database/`: SQL tạo CSDL, trigger, hàm nghiệp vụ, dữ liệu demo, 6 view, ví dụ sử dụng và kiểm tra.
 
 ## Cài đặt CSDL
 
@@ -56,6 +56,17 @@ Tham khảo: `python verify_demo_password.py khach01` rồi nhập mật khẩu.
 ## Triển khai ứng dụng tiếp theo
 
 Các file này hoàn thành phần phân tích thiết kế và CSDL. **Chưa có ứng dụng Web/API đã triển khai**. Các lớp service, hợp đồng API và màn hình trong báo cáo là thiết kế cho nhóm lập trình.
+
+### Prototype giao diện
+
+Prototype responsive cho Manager và Customer nằm bên ngoài thư mục CRM tại `../frontend`, gồm dashboard, khách hàng, phản hồi, khảo sát và các điểm vào báo cáo/quản trị. Từ thư mục gốc repository, chạy:
+
+```sh
+cd frontend
+npm run dev
+```
+
+Sau đó mở `http://localhost:4173`. Cấu trúc triển khai đầy đủ và ranh giới phân quyền được ghi tại `docs/PROJECT_STRUCTURE.md`.
 
 Backend phải lấy actor ID và customer ID từ phiên; không tin ID người thao tác gửi tùy ý từ client. Các hàm SQL không thay thế xác thực HTTP. Bổ sung kiểm tra danh mục active, Admin active cuối cùng, thu hồi phiên locked, truy vấn có tham số, giới hạn đăng nhập và kiểm thử đồng thời trên PostgreSQL thật. Không cấp quyền truy cập SQL trực tiếp cho khách hàng.
 
