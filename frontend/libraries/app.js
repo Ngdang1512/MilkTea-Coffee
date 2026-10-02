@@ -1,43 +1,60 @@
-import { customers } from "../models/customers.js";
 import { APP_CONFIG } from "../configs/app-config.js";
-import { customerApi } from "./api-client.js";
+import { customerApi, internalApi } from "./api-client.js";
 
-const customerSession = { profile: null, options: null, currentSurvey: null, questionIndex: 0, answers: [] };
+const customerSession = { profile: null, options: null, currentSurvey: null, questionIndex: 0, answers: [], notifications: [] };
+const internalSession = { account: null, dashboard: null, customers: [], feedback: [], surveys: [], accounts: [], branches: [], catalogs: null, loaded: new Set() };
 const escapeHtml = value => String(value ?? "").replace(/[&<>"]/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[character]);
+const initials = name => String(name || "?").trim().split(/\s+/).slice(-2).map(word => word[0]).join("").toUpperCase();
+const formatDate = value => value ? new Date(value).toLocaleDateString("vi-VN") : "—";
+const statusLabel = value => ({ active: "Hoạt động", locked: "Đã khóa", moi: "Mới", da_xem: "Đã xem", da_tiep_thu: "Đã tiếp thu", nhap: "Bản nháp", dang_mo: "Đang mở", da_dong: "Đã đóng", admin: "Quản trị viên", manager: "Manager", staff: "Nhân viên" })[value] || value;
 
 const icons = { up: "↗", down: "↘" };
 const metric = (label, value, delta, note, color, direction = "up") => `<article class="metric-card"><div class="metric-head"><span class="metric-icon ${color}">${color === "green" ? "♧" : color === "amber" ? "◌" : color === "blue" ? "✓" : "☆"}</span><button>•••</button></div><p>${label}</p><div class="metric-value">${value}</div><footer><span class="${direction}">${icons[direction]} ${delta}</span><small>${note}</small></footer></article>`;
 
 function dashboard() {
+  const data = internalSession.dashboard;
+  const summary = data?.summary || {};
+  const rows = data?.recentCustomers || [];
   return `<section class="page-heading"><div><p class="eyebrow">THỨ BA, 29 THÁNG 09</p><h1>Chào buổi sáng, Quản Lý! <span>👋</span></h1><p>Đây là những gì đang diễn ra tại milktea-coffee hôm nay.</p></div><button class="date-button">▣ &nbsp; 01/09 — 29/09/2026⌄</button></section>
-  <section class="metrics">${metric("Tổng khách hàng", "2.248", "12,5%", "so với tháng trước", "green")}${metric("Phản hồi mới", "38", "8,2%", "cần xử lý", "amber")}${metric("Tỷ lệ hoàn thành", "72,4%", "4,1%", "khảo sát đang mở", "blue")}${metric("Điểm hài lòng", "4,7", "0,3", "trên thang 5 điểm", "rose")}</section>
+  <section class="metrics">${metric("Tổng khách hàng", summary.totalCustomers ?? "…", "", `${summary.activeCustomers ?? 0} đang hoạt động`, "green")}${metric("Phản hồi mới", summary.newFeedback ?? "…", "", `${summary.totalFeedback ?? 0} phản hồi`, "amber")}${metric("Khảo sát", summary.totalSurveys ?? "…", "", "trên hệ thống", "blue")}${metric("Điểm hài lòng", summary.averageRating ?? "…", "", "trên thang 5 điểm", "rose")}</section>
   <section class="dashboard-grid">
     <article class="panel chart-panel"><div class="panel-title"><div><h2>Tăng trưởng khách hàng</h2><p>Khách hàng mới trong 6 tháng gần nhất</p></div><div class="legend"><i></i> Khách hàng mới <select><option>6 tháng</option><option>12 tháng</option></select></div></div><div class="chart"><div class="y-axis"><span>600</span><span>450</span><span>300</span><span>150</span><span>0</span></div><div class="plot"><i style="--h:45%"><b>Thg 4</b></i><i style="--h:55%"><b>Thg 5</b></i><i style="--h:49%"><b>Thg 6</b></i><i style="--h:66%"><b>Thg 7</b></i><i style="--h:75%"><b>Thg 8</b></i><i class="current" style="--h:91%"><em>548</em><b>Thg 9</b></i></div></div></article>
     <article class="panel satisfaction"><div class="panel-title"><div><h2>Mức độ hài lòng</h2><p>Tổng hợp 1.642 lượt đánh giá</p></div><button>•••</button></div><div class="donut-wrap"><div class="donut"><div><strong>4,7</strong><span>★★★★★</span><small>Rất tốt</small></div></div><div class="rating-list"><p><i class="good"></i><span>Rất hài lòng</span><strong>68%</strong></p><p><i class="okay"></i><span>Hài lòng</span><strong>22%</strong></p><p><i class="neutral"></i><span>Bình thường</span><strong>7%</strong></p><p><i class="bad"></i><span>Chưa hài lòng</span><strong>3%</strong></p></div></div></article>
   </section>
-  <section class="panel recent"><div class="panel-title"><div><h2>Khách hàng gần đây</h2><p>Những hồ sơ vừa được cập nhật</p></div><button class="text-button" data-view="customers">Xem tất cả →</button></div>${customerTable(customers.slice(0,4))}</section>`;
+  <section class="panel recent"><div class="panel-title"><div><h2>Khách hàng gần đây</h2><p>Những hồ sơ vừa được cập nhật</p></div><button class="text-button" data-view="customers">Xem tất cả →</button></div>${customerTable(rows)}</section>`;
 }
 
 function customerTable(rows) {
-  return `<div class="table-wrap"><table><thead><tr><th>Khách hàng</th><th>Mã thành viên</th><th>Tuổi</th><th>Sở thích</th><th>Trạng thái</th><th>Cập nhật</th><th></th></tr></thead><tbody>${rows.map(c => `<tr><td><div class="customer"><span class="avatar ${c.tone}">${c.initials}</span><div><strong>${c.name}</strong><small>${c.name.toLowerCase().replaceAll(" ", ".")}@email.com</small></div></div></td><td><code>${c.code}</code></td><td>${c.age}</td><td>${c.preference}</td><td><span class="status ${c.status === "Đã khóa" ? "locked" : "active"}"><i></i>${c.status}</span></td><td class="muted">${c.last}</td><td><button class="row-menu">•••</button></td></tr>`).join("")}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><thead><tr><th>Khách hàng</th><th>Mã thành viên</th><th>Tuổi</th><th>Sở thích</th><th>Trạng thái</th><th>Cập nhật</th></tr></thead><tbody>${rows.map(c => `<tr><td><div class="customer"><span class="avatar">${initials(c.name)}</span><div><strong>${escapeHtml(c.name)}</strong><small>${escapeHtml(c.username || "Khách hàng CRM")}</small></div></div></td><td><code>${escapeHtml(c.code)}</code></td><td>${c.age}</td><td>${escapeHtml(c.preference)}</td><td><span class="status ${c.status === "locked" ? "locked" : "active"}"><i></i>${statusLabel(c.status)}</span></td><td class="muted">${formatDate(c.updatedAt)}</td></tr>`).join("")}</tbody></table></div>`;
 }
 
 function customersView() {
-  return `<section class="page-heading compact"><div><p class="eyebrow">KHÁCH HÀNG</p><h1>Quản lý khách hàng</h1><p>Tìm kiếm, theo dõi hồ sơ và sở thích trên toàn chuỗi.</p></div><button class="primary" id="addCustomer">＋ Thêm khách hàng</button></section><section class="panel list-panel"><div class="list-toolbar"><label class="list-search">⌕<input id="customerSearch" placeholder="Tìm theo tên, mã thành viên..." /></label><button class="filter">☷ &nbsp; Bộ lọc</button><select><option>Tất cả trạng thái</option><option>Hoạt động</option><option>Đã khóa</option></select></div><div id="customerResults">${customerTable(customers)}</div><footer class="pagination"><span>Hiển thị 1–5 trong 248 khách hàng</span><div><button disabled>‹</button><button class="selected">1</button><button>2</button><button>3</button><button>…</button><button>50</button><button>›</button></div></footer></section>`;
+  const rows = internalSession.customers;
+  return `<section class="page-heading compact"><div><p class="eyebrow">KHÁCH HÀNG</p><h1>Quản lý khách hàng</h1><p>Tìm kiếm, theo dõi hồ sơ và sở thích trên toàn chuỗi.</p></div></section><section class="panel list-panel"><div class="list-toolbar"><label class="list-search">⌕<input id="customerSearch" placeholder="Tìm theo tên, mã thành viên..." /></label></div><div id="customerResults">${customerTable(rows)}</div><footer class="pagination"><span>Hiển thị ${rows.length} khách hàng từ database</span></footer></section>`;
 }
 
 function feedbackView() {
-  const items = [["TA","Trần Ngọc Anh","Cà phê muối","Đậm vị, thơm và nhân viên rất nhiệt tình.",5,"Mới"],["NL","Nguyễn Minh Long","Trà đào cam sả","Đồ uống ngon nhưng thời gian chờ hơi lâu.",4,"Đã xem"],["PH","Phạm Gia Hân","Trà sữa ô long","Mong quán có thêm lựa chọn sữa hạt.",4,"Đã tiếp thu"]];
-  return `<section class="page-heading compact"><div><p class="eyebrow">CHĂM SÓC KHÁCH HÀNG</p><h1>Phản hồi</h1><p>Lắng nghe và xử lý ý kiến khách hàng kịp thời.</p></div><button class="date-button">▣ &nbsp; Tháng 09/2026</button></section><div class="segmented"><button class="active">Tất cả <b>38</b></button><button>Mới <b>8</b></button><button>Đã xem <b>21</b></button><button>Đã tiếp thu <b>9</b></button></div><section class="feedback-list">${items.map(x => `<article class="feedback-card"><div class="avatar mint">${x[0]}</div><div class="feedback-body"><div><strong>${x[1]}</strong><span>• ${x[2]}</span></div><div class="stars">${"★".repeat(x[4])}</div><p>“${x[3]}”</p><small>Chi nhánh Nguyễn Huệ · 2 giờ trước</small></div><div class="feedback-actions"><span class="status ${x[5] === "Mới" ? "new" : "active"}">${x[5]}</span><button class="outline action-toast">Cập nhật trạng thái</button></div></article>`).join("")}</section>`;
+  const items = internalSession.feedback;
+  const newCount = items.filter(item => item.status === "moi").length;
+  return `<section class="page-heading compact"><div><p class="eyebrow">CHĂM SÓC KHÁCH HÀNG</p><h1>Phản hồi</h1><p>Lắng nghe và xử lý ý kiến khách hàng kịp thời.</p></div></section><div class="segmented"><button class="active">Tất cả <b>${items.length}</b></button><button>Mới <b>${newCount}</b></button></div><section class="feedback-list">${items.map(item => `<article class="feedback-card"><div class="avatar mint">${initials(item.customerName)}</div><div class="feedback-body"><div><strong>${escapeHtml(item.customerName)}</strong><span>• ${escapeHtml(item.drinkName)}</span></div><div class="stars">${"★".repeat(item.rating)}${"☆".repeat(5-item.rating)}</div><p>“${escapeHtml(item.content)}”</p>${item.reply ? `<div class="form-note"><strong>Đã trả lời:</strong> ${escapeHtml(item.reply)}</div>` : ""}<small>${escapeHtml(item.branchName || "Phản hồi chung")} · ${formatDate(item.sentAt)}</small></div><div class="feedback-actions"><span class="status ${item.status === "moi" ? "new" : "active"}">${statusLabel(item.status)}</span>${item.status === "moi" ? `<button class="outline feedback-update" data-feedback-id="${item.id}" data-status="da_xem">Trả lời khách hàng</button>` : item.status === "da_xem" ? `<button class="outline feedback-update" data-feedback-id="${item.id}" data-status="da_tiep_thu">Phản hồi & tiếp thu</button>` : ""}</div></article>`).join("")}</section>`;
 }
 
 function surveysView() {
-  return `<section class="page-heading compact"><div><p class="eyebrow">KHẢO SÁT</p><h1>Khảo sát khách hàng</h1><p>Thiết kế khảo sát và theo dõi tỷ lệ hoàn thành.</p></div><button class="primary action-toast">＋ Tạo khảo sát</button></section><section class="survey-grid">${[["Mức độ hài lòng tháng 09","Đang mở","548","76%","30/09/2026"],["Hương vị mùa thu 2026","Bản nháp","—","—","Chưa đặt"],["Trải nghiệm tại cửa hàng","Đã đóng","1.024","82%","15/09/2026"]].map((s,i) => `<article class="panel survey-card"><div class="survey-top"><span class="survey-icon">${i===1?"✎":"✓"}</span><span class="status ${i===0?"active":i===1?"draft":"locked"}">${s[1]}</span></div><h2>${s[0]}</h2><p>${i===1?"Khảo sát ý tưởng sản phẩm mới cho mùa thu.":"Đánh giá sản phẩm, dịch vụ và trải nghiệm tại cửa hàng."}</p><div class="survey-stats"><div><small>Người nhận</small><strong>${s[2]}</strong></div><div><small>Hoàn thành</small><strong>${s[3]}</strong></div><div><small>Hạn trả lời</small><strong>${s[4]}</strong></div></div><button class="outline action-toast">${i===1?"Tiếp tục soạn":"Xem kết quả"} →</button></article>`).join("")}</section>`;
+  return `<section class="page-heading compact"><div><p class="eyebrow">KHẢO SÁT</p><h1>Khảo sát khách hàng</h1><p>Theo dõi dữ liệu phân phối và tỷ lệ hoàn thành.</p></div><button class="primary" data-view="create-survey">＋ Tạo khảo sát hàng loạt</button></section><section class="survey-grid">${internalSession.surveys.map(s => `<article class="panel survey-card"><div class="survey-top"><span class="survey-icon">${s.status === "nhap" ? "✎" : "✓"}</span><span class="status ${s.status === "dang_mo" ? "active" : s.status === "nhap" ? "draft" : "locked"}">${statusLabel(s.status)}</span></div><h2>${escapeHtml(s.title)}</h2><p>${escapeHtml(s.description || "Không có mô tả")}</p><div class="survey-stats"><div><small>Người nhận</small><strong>${s.recipients}</strong></div><div><small>Hoàn thành</small><strong>${s.completionRate}%</strong></div><div><small>Hạn trả lời</small><strong>${formatDate(s.endAt)}</strong></div></div></article>`).join("")}</section>`;
+}
+
+function createSurveyView() {
+  return `<section class="page-heading compact"><div><p class="eyebrow">KHẢO SÁT HÀNG LOẠT</p><h1>Tạo khảo sát đánh giá</h1><p>Khảo sát sẽ được phát hành và thông báo đến toàn bộ khách hàng đang hoạt động.</p></div></section><form class="panel profile-form" id="bulkSurveyForm"><div class="form-grid"><label>Tiêu đề *<input name="title" minlength="3" maxlength="255" required /></label><label>Hạn trả lời *<input name="endAt" type="datetime-local" required /></label></div><label>Mô tả<textarea name="description" rows="3"></textarea></label><div class="form-heading"><h2>Câu hỏi đánh giá</h2><p>Mỗi dòng lựa chọn ngăn cách bằng dấu chấm phẩy.</p></div><div id="surveyQuestions"><div class="form-grid survey-question-input"><label>Câu hỏi *<input name="question" required /></label><label>Các lựa chọn *<input name="choices" placeholder="Rất hài lòng; Hài lòng; Bình thường; Chưa hài lòng" required /></label></div></div><footer><button type="button" class="outline" id="addSurveyQuestion">＋ Thêm câu hỏi</button><button class="primary" type="submit">Phát hành và thông báo</button></footer></form>`;
+}
+
+function notificationsView() {
+  return `<section class="page-heading compact"><div><p class="eyebrow">THÔNG BÁO</p><h1>Thông báo của tôi</h1><p>Khảo sát mới và trả lời từ đội ngũ chăm sóc khách hàng.</p></div></section><section class="survey-list">${customerSession.notifications.length ? customerSession.notifications.map(item => `<article class="panel my-survey ${item.read ? "" : "featured"}"><div class="survey-number ${item.read ? "done" : ""}">${item.type === "survey" ? "✓" : "♡"}</div><div><span class="status ${item.read ? "locked" : "active"}">${item.read ? "Đã đọc" : "Mới"}</span><h2>${escapeHtml(item.title)}</h2><p>${escapeHtml(item.content)} · ${formatDate(item.createdAt)}</p></div>${item.link ? `<button class="outline notification-open" data-id="${item.id}" data-link="${escapeHtml(item.link)}">Xem →</button>` : ""}</article>`).join("") : `<article class="panel empty-state"><span>♢</span><h2>Chưa có thông báo</h2></article>`}</section>`;
 }
 
 function adminDashboard() {
+  const summary = internalSession.dashboard?.summary || {};
   return `<section class="admin-heading"><div><p class="eyebrow">QUẢN TRỊ HỆ THỐNG</p><h1>Dashboard</h1><p>Theo dõi hoạt động toàn chuỗi milktea-coffee tại một nơi.</p></div><div class="admin-heading-actions"><button class="outline action-toast">⇩ Xuất báo cáo</button><button class="primary action-toast">＋ Thêm tài khoản</button></div></section>
-  <section class="admin-kpis"><article class="admin-kpi featured"><div><p>Khách hàng hoạt động</p><span>↗</span></div><strong>2.184</strong><small>97,2% tổng khách hàng CRM</small><em>↗ 4,6%</em></article><article class="admin-kpi"><div><p>Phản hồi tháng này</p><span>↗</span></div><strong>318</strong><small>286 phản hồi đã xử lý</small><em>90%</em></article><article class="admin-kpi"><div><p>Điểm hài lòng</p><span>↗</span></div><strong>4,7</strong><small>Trung bình trên thang 5 điểm</small><em>＋0,3</em></article><article class="admin-kpi"><div><p>Hoàn thành khảo sát</p><span>↗</span></div><strong>72,4%</strong><small>548 trong 757 người nhận</small><em>↗ 4,1%</em></article></section>
+  <section class="admin-kpis"><article class="admin-kpi featured"><div><p>Khách hàng hoạt động</p><span>↗</span></div><strong>${summary.activeCustomers ?? "…"}</strong><small>${summary.totalCustomers ?? 0} tổng khách hàng CRM</small></article><article class="admin-kpi"><div><p>Phản hồi</p><span>↗</span></div><strong>${summary.totalFeedback ?? "…"}</strong><small>${summary.newFeedback ?? 0} phản hồi mới</small></article><article class="admin-kpi"><div><p>Điểm hài lòng</p><span>↗</span></div><strong>${summary.averageRating ?? "…"}</strong><small>Trung bình trên thang 5 điểm</small></article><article class="admin-kpi"><div><p>Khảo sát</p><span>↗</span></div><strong>${summary.totalSurveys ?? "…"}</strong><small>Khảo sát trong database</small></article></section>
   <section class="admin-board"><article class="panel admin-analytics"><div class="panel-title"><div><h2>Phản hồi trong tuần</h2><p>Lượng ý kiến khách hàng theo ngày gửi</p></div><button class="mini-filter">Tuần này⌄</button></div><div class="admin-bars"><div style="--v:42%"><i></i><b>T2</b></div><div style="--v:68%"><i></i><b>T3</b></div><div class="highlight" style="--v:82%"><em>18</em><i></i><b>T4</b></div><div style="--v:58%"><i></i><b>T5</b></div><div class="coffee" style="--v:90%"><i></i><b>T6</b></div><div style="--v:63%"><i></i><b>T7</b></div><div style="--v:35%"><i></i><b>CN</b></div></div><footer><span><i class="matcha-dot"></i>Đã xử lý</span><span><i class="coffee-dot"></i>Cần theo dõi</span><strong>86 phản hồi tuần này</strong></footer></article>
   <article class="panel admin-reminder"><div class="panel-title"><div><h2>Nhắc việc</h2><p>Hôm nay, 01 tháng 10</p></div><span class="live-dot"></span></div><span class="reminder-icon">☕</span><h3>Kiểm tra dữ liệu sao lưu</h3><p>Xác nhận bản sao lưu PostgreSQL và kiểm tra nhật ký hệ thống.</p><button class="primary action-toast">✓ Đánh dấu hoàn tất</button></article>
   <article class="panel admin-shortcuts"><div class="panel-title"><div><h2>Quản lý nhanh</h2><p>Danh mục hệ thống</p></div><button class="tiny-add action-toast">＋ Mới</button></div><button data-view="accounts"><span class="shortcut-icon matcha">♧</span><div><strong>Tài khoản nội bộ</strong><small>24 tài khoản · 3 vai trò</small></div><b>→</b></button><button data-view="branches"><span class="shortcut-icon latte">⌖</span><div><strong>Chi nhánh</strong><small>8 địa điểm hoạt động</small></div><b>→</b></button><button data-view="admin-catalog"><span class="shortcut-icon tea">◇</span><div><strong>Đồ uống</strong><small>42 sản phẩm kinh doanh</small></div><b>→</b></button><button data-view="admin-catalog"><span class="shortcut-icon berry">♡</span><div><strong>Nhóm sở thích</strong><small>4 nhóm đang sử dụng</small></div><b>→</b></button></article>
@@ -47,16 +64,23 @@ function adminDashboard() {
 }
 
 function accountsView() {
-  const rows = [["AD","admin","Quản trị viên","Toàn hệ thống","Hoạt động"],["QA","quanly","Manager","Nguyễn Huệ","Hoạt động"],["NV","nhanvien","Nhân viên","Lê Lợi","Hoạt động"],["TH","nv.tam","Nhân viên","Quận 7","Đã khóa"]];
-  return `<section class="page-heading compact"><div><p class="eyebrow">QUẢN TRỊ</p><h1>Tài khoản nội bộ</h1><p>Tạo tài khoản, gán vai trò và kiểm soát quyền truy cập.</p></div><button class="primary action-toast">＋ Tạo tài khoản</button></section><section class="panel list-panel"><div class="list-toolbar"><label class="list-search">⌕<input placeholder="Tìm username hoặc chi nhánh..." /></label><select><option>Tất cả vai trò</option><option>Admin</option><option>Manager</option><option>Nhân viên</option></select><select><option>Tất cả trạng thái</option><option>Hoạt động</option><option>Đã khóa</option></select></div><div class="table-wrap"><table><thead><tr><th>Tài khoản</th><th>Username</th><th>Vai trò</th><th>Chi nhánh</th><th>Trạng thái</th><th>Đăng nhập gần nhất</th><th></th></tr></thead><tbody>${rows.map((r,i)=>`<tr><td><div class="customer"><span class="avatar ${i===3?"gray":"mint"}">${r[0]}</span><strong>${r[1]==="admin"?"System Administrator":r[1]==="quanly"?"Nguyễn Quản Lý":r[1]==="nhanvien"?"Trần Nhân Viên":"Lê Thanh Tâm"}</strong></div></td><td><code>${r[1]}</code></td><td><span class="role-badge">${r[2]}</span></td><td>${r[3]}</td><td><span class="status ${r[4]==="Đã khóa"?"locked":"active"}"><i></i>${r[4]}</span></td><td class="muted">${i<2?"Hôm nay, 09:32":"28/09/2026"}</td><td><button class="row-menu action-toast">•••</button></td></tr>`).join("")}</tbody></table></div><footer class="pagination"><span>Hiển thị 4 trong 24 tài khoản</span></footer></section>`;
+  const rows = internalSession.accounts;
+  return `<section class="page-heading compact"><div><p class="eyebrow">QUẢN TRỊ</p><h1>Tài khoản nội bộ</h1><p>Tài khoản và quyền truy cập đang lưu trong PostgreSQL.</p></div></section><section class="panel list-panel"><div class="table-wrap"><table><thead><tr><th>Tài khoản</th><th>Vai trò</th><th>Chi nhánh</th><th>Trạng thái</th><th>Ngày tạo</th></tr></thead><tbody>${rows.map(r=>`<tr><td><div class="customer"><span class="avatar mint">${initials(r.username)}</span><strong>${escapeHtml(r.username)}</strong></div></td><td><span class="role-badge">${statusLabel(r.role)}</span></td><td>${escapeHtml(r.branchName || "Toàn hệ thống")}</td><td><span class="status ${r.status === "locked" ? "locked" : "active"}"><i></i>${statusLabel(r.status)}</span></td><td class="muted">${formatDate(r.createdAt)}</td></tr>`).join("")}</tbody></table></div><footer class="pagination"><span>Hiển thị ${rows.length} tài khoản nội bộ</span></footer></section>`;
+}
+
+function internalLoginView() {
+  const portalName = internalApi.portal === "admin" ? "Admin" : "Manager";
+  const demoAccount = internalApi.portal === "admin" ? "admin" : "quanly";
+  return `<section class="auth-shell"><div class="auth-story"><span class="welcome-chip">CỔNG ${portalName.toUpperCase()} CRM</span><h1>Quản lý dữ liệu<br/>toàn chuỗi.</h1><p>Đăng nhập bằng tài khoản ${portalName} để truy cập dữ liệu thật.</p></div><form class="auth-card" id="internalLoginForm"><div class="form-heading"><p class="eyebrow">KHU VỰC ${portalName.toUpperCase()}</p><h2>Đăng nhập</h2><p>Phiên làm việc được phân quyền tại API.</p></div><label>Tên đăng nhập<input name="tenDangNhap" autocomplete="username" required /></label><label>Mật khẩu<input name="matKhau" type="password" autocomplete="current-password" required /></label><div class="auth-error" id="internalAuthError" role="alert"></div><button class="primary auth-submit" type="submit">Đăng nhập →</button><small>Demo: ${demoAccount} / DemoCRM@2026</small></form></section>`;
 }
 
 function branchesView() {
-  return `<section class="page-heading compact"><div><p class="eyebrow">DANH MỤC HỆ THỐNG</p><h1>Chi nhánh</h1><p>Quản lý địa điểm làm việc của Manager và nhân viên.</p></div><button class="primary action-toast">＋ Thêm chi nhánh</button></section><section class="branch-grid">${[["CN01","Nguyễn Huệ","42 Nguyễn Huệ, Quận 1","12 nhân sự"],["CN02","Lê Lợi","118 Lê Lợi, Quận 1","8 nhân sự"],["CN03","Quận 7","25 Nguyễn Thị Thập, Quận 7","4 nhân sự"]].map((b,i)=>`<article class="panel branch-card"><div><span class="branch-code">${b[0]}</span><button class="row-menu">•••</button></div><span class="status active"><i></i>Đang hoạt động</span><h2>${b[1]}</h2><p>⌖ ${b[2]}</p><footer><span>♧ ${b[3]}</span><button class="outline action-toast">Chỉnh sửa</button></footer></article>`).join("")}</section>`;
+  return `<section class="page-heading compact"><div><p class="eyebrow">DANH MỤC HỆ THỐNG</p><h1>Chi nhánh</h1><p>Địa điểm làm việc lấy trực tiếp từ PostgreSQL.</p></div></section><section class="branch-grid">${internalSession.branches.map(b=>`<article class="panel branch-card"><div><span class="branch-code">${escapeHtml(b.code)}</span></div><span class="status ${b.active ? "active" : "locked"}"><i></i>${b.active ? "Đang hoạt động" : "Ngừng hoạt động"}</span><h2>${escapeHtml(b.name)}</h2><p>⌖ ${escapeHtml(b.address)}</p><footer><span>☎ ${escapeHtml(b.phone || "Chưa cập nhật")}</span></footer></article>`).join("")}</section>`;
 }
 
 function adminCatalogView() {
-  return `<section class="page-heading compact"><div><p class="eyebrow">DANH MỤC HỆ THỐNG</p><h1>Danh mục</h1><p>Quản lý nhóm sở thích và đồ uống dùng trong CRM.</p></div><button class="primary action-toast">＋ Thêm danh mục</button></section><section class="catalog-layout"><article class="panel"><div class="panel-title"><div><h2>Nhóm sở thích</h2><p>4 nhóm đang được sử dụng</p></div></div>${["Trà sữa truyền thống","Cà phê muối","Trà trái cây nhiệt đới","Ít ngọt / Healthy"].map((x,i)=>`<div class="catalog-row"><span class="catalog-icon">${i+1}</span><div><strong>${x}</strong><small>${[624,418,782,424][i]} khách hàng</small></div><span class="status active">Đang dùng</span><button class="row-menu">•••</button></div>`).join("")}</article><article class="panel"><div class="panel-title"><div><h2>Đồ uống nổi bật</h2><p>42 sản phẩm đang kinh doanh</p></div><button class="text-button">Xem tất cả →</button></div>${["Trà đào cam sả","Cà phê muối","Trà sữa ô long","Matcha latte"].map((x,i)=>`<div class="catalog-row"><span class="drink-dot ${["green","amber","blue","rose"][i]}">☕</span><div><strong>${x}</strong><small>DU-00${i+1}</small></div><span class="status active">Kinh doanh</span><button class="row-menu">•••</button></div>`).join("")}</article></section>`;
+  const catalogs = internalSession.catalogs || { preferences: [], drinks: [] };
+  return `<section class="page-heading compact"><div><p class="eyebrow">DANH MỤC HỆ THỐNG</p><h1>Danh mục</h1><p>Nhóm sở thích và đồ uống đang lưu trong PostgreSQL.</p></div></section><section class="catalog-layout"><article class="panel"><div class="panel-title"><div><h2>Nhóm sở thích</h2><p>${catalogs.preferences.length} nhóm</p></div></div>${catalogs.preferences.map((x,i)=>`<div class="catalog-row"><span class="catalog-icon">${i+1}</span><div><strong>${escapeHtml(x.name)}</strong><small>${escapeHtml(x.description || "Không có mô tả")}</small></div><span class="status ${x.active ? "active" : "locked"}">${x.active ? "Đang dùng" : "Ngừng dùng"}</span></div>`).join("")}</article><article class="panel"><div class="panel-title"><div><h2>Đồ uống</h2><p>${catalogs.drinks.length} sản phẩm</p></div></div>${catalogs.drinks.map(x=>`<div class="catalog-row"><span class="drink-dot green">☕</span><div><strong>${escapeHtml(x.name)}</strong><small>${escapeHtml(x.code)}</small></div><span class="status ${x.active ? "active" : "locked"}">${x.active ? "Kinh doanh" : "Ngừng bán"}</span></div>`).join("")}</article></section>`;
 }
 
 function loginView() {
@@ -99,14 +123,14 @@ function surveyTakeView() {
 
 function placeholder(name, desc) { return `<section class="page-heading compact"><div><p class="eyebrow">MILKTEA-COFFEE</p><h1>${name}</h1><p>${desc}</p></div></section><section class="panel empty-state"><span>✦</span><h2>Khu vực đang được hoàn thiện</h2><p>Cấu trúc màn hình đã sẵn sàng để kết nối endpoint tương ứng trong REST API.</p><button class="primary action-toast">Xem tài liệu API</button></section>`; }
 
-const adminViews = { "admin-dashboard": adminDashboard, accounts: accountsView, branches: branchesView, "admin-catalog": adminCatalogView, settings: () => placeholder("Cài đặt hệ thống", "Bảo mật, sao lưu và cấu hình vận hành hệ thống.") };
-const managerViews = { dashboard, customers: customersView, feedback: feedbackView, surveys: surveysView, reports: () => placeholder("Báo cáo & phân tích", "Theo dõi khách hàng, phản hồi và hiệu quả khảo sát.") };
-const customerViews = { login: loginView, register: registerView, "customer-home": customerHome, profile: profileView, "my-feedback": myFeedbackView, "my-surveys": mySurveysView, "take-survey": surveyTakeView };
-const titles = { "admin-dashboard": "Quản trị", accounts: "Tài khoản nội bộ", branches: "Chi nhánh", "admin-catalog": "Danh mục", dashboard: "Tổng quan", customers: "Khách hàng", feedback: "Phản hồi", surveys: "Khảo sát", reports: "Báo cáo", settings: "Cài đặt", login: "Đăng nhập", register: "Đăng ký", "customer-home": "Trang chủ", profile: "Hồ sơ", "my-feedback": "Phản hồi của tôi", "my-surveys": "Khảo sát của tôi", "take-survey": "Thực hiện khảo sát" };
+const adminViews = { "internal-login": internalLoginView, "admin-dashboard": adminDashboard, accounts: accountsView, branches: branchesView, "admin-catalog": adminCatalogView, settings: () => placeholder("Cài đặt hệ thống", "Bảo mật, sao lưu và cấu hình vận hành hệ thống.") };
+const managerViews = { "internal-login": internalLoginView, dashboard, customers: customersView, feedback: feedbackView, surveys: surveysView, "create-survey": createSurveyView, reports: () => placeholder("Báo cáo & phân tích", "Theo dõi khách hàng, phản hồi và hiệu quả khảo sát.") };
+const customerViews = { login: loginView, register: registerView, "customer-home": customerHome, profile: profileView, "my-feedback": myFeedbackView, "my-surveys": mySurveysView, notifications: notificationsView, "take-survey": surveyTakeView };
+const titles = { "internal-login": "Đăng nhập nội bộ", "admin-dashboard": "Quản trị", accounts: "Tài khoản nội bộ", branches: "Chi nhánh", "admin-catalog": "Danh mục", dashboard: "Tổng quan", customers: "Khách hàng", feedback: "Phản hồi", surveys: "Khảo sát", "create-survey": "Tạo khảo sát", reports: "Báo cáo", settings: "Cài đặt", login: "Đăng nhập", register: "Đăng ký", "customer-home": "Trang chủ", profile: "Hồ sơ", "my-feedback": "Phản hồi của tôi", "my-surveys": "Khảo sát của tôi", notifications: "Thông báo", "take-survey": "Thực hiện khảo sát" };
 const navs = {
-  admin: `<p class="nav-label">Quản trị hệ thống</p><button class="nav-item" data-view="admin-dashboard"><span class="icon">⌂</span>Tổng quan</button><button class="nav-item" data-view="accounts"><span class="icon">♧</span>Tài khoản <b>24</b></button><button class="nav-item" data-view="branches"><span class="icon">⌖</span>Chi nhánh</button><button class="nav-item" data-view="admin-catalog"><span class="icon">◇</span>Danh mục</button><p class="nav-label">Vận hành</p><button class="nav-item" data-view="settings"><span class="icon">⚙</span>Cài đặt hệ thống</button>`,
-  manager: `<p class="nav-label">Không gian làm việc</p><button class="nav-item" data-view="dashboard"><span class="icon">⌂</span>Tổng quan</button><button class="nav-item" data-view="customers"><span class="icon">♧</span>Khách hàng <b>248</b></button><button class="nav-item" data-view="feedback"><span class="icon">◌</span>Phản hồi <i>8</i></button><button class="nav-item" data-view="surveys"><span class="icon">✓</span>Khảo sát</button><button class="nav-item" data-view="reports"><span class="icon">⌁</span>Báo cáo</button>`,
-  customer: `<p class="nav-label">Tài khoản của tôi</p><button class="nav-item" data-view="customer-home"><span class="icon">⌂</span>Trang chủ</button><button class="nav-item" data-view="profile"><span class="icon">♧</span>Hồ sơ cá nhân</button><button class="nav-item" data-view="my-feedback"><span class="icon">♡</span>Phản hồi của tôi</button><button class="nav-item" data-view="my-surveys"><span class="icon">✓</span>Khảo sát <i>1</i></button><p class="nav-label">Hỗ trợ</p><button class="nav-item action-toast"><span class="icon">?</span>Trung tâm trợ giúp</button>`
+  admin: `<p class="nav-label">Quản trị hệ thống</p><button class="nav-item" data-view="admin-dashboard"><span class="icon">⌂</span>Tổng quan</button><button class="nav-item" data-view="accounts"><span class="icon">♧</span>Tài khoản <b id="accountCount">…</b></button><button class="nav-item" data-view="branches"><span class="icon">⌖</span>Chi nhánh</button><button class="nav-item" data-view="admin-catalog"><span class="icon">◇</span>Danh mục</button><p class="nav-label">Vận hành</p><button class="nav-item" data-view="settings"><span class="icon">⚙</span>Cài đặt hệ thống</button>`,
+  manager: `<p class="nav-label">Không gian làm việc</p><button class="nav-item" data-view="dashboard"><span class="icon">⌂</span>Tổng quan</button><button class="nav-item" data-view="customers"><span class="icon">♧</span>Khách hàng <b id="customerCount">…</b></button><button class="nav-item" data-view="feedback"><span class="icon">◌</span>Phản hồi <i id="feedbackCount">…</i></button><button class="nav-item" data-view="surveys"><span class="icon">✓</span>Khảo sát</button><button class="nav-item" data-view="reports"><span class="icon">⌁</span>Báo cáo</button>`,
+  customer: `<p class="nav-label">Tài khoản của tôi</p><button class="nav-item" data-view="customer-home"><span class="icon">⌂</span>Trang chủ</button><button class="nav-item" data-view="profile"><span class="icon">♧</span>Hồ sơ cá nhân</button><button class="nav-item" data-view="my-feedback"><span class="icon">♡</span>Phản hồi của tôi</button><button class="nav-item" data-view="my-surveys"><span class="icon">✓</span>Khảo sát</button><button class="nav-item" data-view="notifications"><span class="icon">♢</span>Thông báo <i id="notificationCount">0</i></button><p class="nav-label">Hỗ trợ</p><button class="nav-item action-toast"><span class="icon">?</span>Trung tâm trợ giúp</button>`
 };
 const app = document.querySelector("#app");
 const toast = document.querySelector("#toast");
@@ -174,7 +198,7 @@ async function setupCustomerPage(view) {
       document.querySelector("#feedbackDrink").innerHTML = `<option value="">Chọn đồ uống</option>${customerSession.options.drinks.map(item => `<option value="${item.id}">${escapeHtml(item.tenDoUong)}</option>`).join("")}`;
       document.querySelector("#feedbackBranch").innerHTML = `<option value="">Phản hồi chung về sản phẩm</option>${customerSession.options.branches.map(item => `<option value="${item.id}">${escapeHtml(item.tenChiNhanh)}</option>`).join("")}`;
       const history = (await customerApi.feedback()).feedback;
-      document.querySelector("#feedbackHistory").innerHTML = history.length ? history.map(item => `<article class="history-card"><div><strong>${escapeHtml(item.tenDoUong)}</strong><span class="status active">${escapeHtml(item.trangThai === "moi" ? "Mới" : item.trangThai === "da_xem" ? "Đã xem" : "Đã tiếp thu")}</span></div><p>${escapeHtml(item.noiDung)}</p><small>${"★".repeat(item.soSao)}${"☆".repeat(5-item.soSao)} · ${escapeHtml(item.tenChiNhanh || "Phản hồi chung")} · ${new Date(item.ngayGui).toLocaleDateString("vi-VN")}</small></article>`).join("") : `<article class="history-card"><p>Bạn chưa gửi phản hồi nào.</p></article>`;
+      document.querySelector("#feedbackHistory").innerHTML = history.length ? history.map(item => `<article class="history-card"><div><strong>${escapeHtml(item.tenDoUong)}</strong><span class="status active">${escapeHtml(item.trangThai === "moi" ? "Mới" : item.trangThai === "da_xem" ? "Đã xem" : "Đã tiếp thu")}</span></div><p>${escapeHtml(item.noiDung)}</p>${item.phanHoiCuaNhanVien ? `<div class="form-note"><strong>Phản hồi từ cửa hàng:</strong> ${escapeHtml(item.phanHoiCuaNhanVien)}</div>` : ""}<small>${"★".repeat(item.soSao)}${"☆".repeat(5-item.soSao)} · ${escapeHtml(item.tenChiNhanh || "Phản hồi chung")} · ${new Date(item.ngayGui).toLocaleDateString("vi-VN")}</small></article>`).join("") : `<article class="history-card"><p>Bạn chưa gửi phản hồi nào.</p></article>`;
       document.querySelectorAll(".star-picker button").forEach((star, index, all) => star.addEventListener("click", () => { document.querySelector("#feedbackRating").value = star.dataset.rating; all.forEach((item, i) => item.classList.toggle("picked", i <= index)); }));
       document.querySelector("#feedbackForm").addEventListener("submit", async event => {
         event.preventDefault();
@@ -205,6 +229,20 @@ async function setupCustomerPage(view) {
       }));
     }
 
+    if (!customerSession.notifications.length || view === "notifications") {
+      customerSession.notifications = (await customerApi.notifications()).notifications;
+      const unread = customerSession.notifications.filter(item => !item.read).length;
+      const count = document.querySelector("#notificationCount");
+      if (count) count.textContent = unread;
+    }
+    if (view === "notifications") {
+      document.querySelectorAll(".notification-open").forEach(button => button.addEventListener("click", async () => {
+        await customerApi.readNotification(button.dataset.id);
+        customerSession.notifications = [];
+        render(button.dataset.link);
+      }));
+    }
+
     if (view === "take-survey" && customerSession.currentSurvey) {
       document.querySelector("#nextQuestion")?.addEventListener("click", async () => {
         const survey = customerSession.currentSurvey;
@@ -228,6 +266,111 @@ async function setupCustomerPage(view) {
   }
 }
 
+async function setupInternalPage(view) {
+  if (currentRole === "customer") return;
+  if (view === "internal-login") {
+    document.querySelector("#internalLoginForm")?.addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const button = form.querySelector("button[type='submit']");
+      button.dataset.label = "Đăng nhập →";
+      setFormBusy(form, true);
+      try {
+        const data = await internalApi.login(formPayload(form));
+        if (data.account.role !== internalApi.portal) {
+          internalApi.logout();
+          throw new Error(`Tài khoản này thuộc cổng ${data.account.role === "admin" ? "Admin" : "Manager"}. Vui lòng mở đúng đường dẫn.`);
+        }
+        internalSession.account = data.account;
+        internalSession.loaded.clear();
+        currentRole = data.account.role;
+        document.body.dataset.role = currentRole;
+        notify("Đăng nhập nội bộ thành công");
+        applyRole(currentRole);
+      } catch (error) {
+        document.querySelector("#internalAuthError").textContent = error.message;
+        setFormBusy(form, false);
+      }
+    });
+    return;
+  }
+  if (!internalApi.hasToken()) { render("internal-login"); return; }
+
+  try {
+    if (!internalSession.account) internalSession.account = (await internalApi.me()).account;
+    if (internalSession.account.role !== internalApi.portal) {
+      internalApi.logout();
+      internalSession.account = null;
+      throw Object.assign(new Error(`Phiên đăng nhập không thuộc cổng ${internalApi.portal === "admin" ? "Admin" : "Manager"}`), { status: 403 });
+    }
+    const loaders = {
+      "admin-dashboard": async () => { internalSession.dashboard = await internalApi.dashboard(); },
+      dashboard: async () => { internalSession.dashboard = await internalApi.dashboard(); },
+      customers: async () => { internalSession.customers = (await internalApi.customers()).customers; },
+      feedback: async () => { internalSession.feedback = (await internalApi.feedback()).feedback; },
+      surveys: async () => { internalSession.surveys = (await internalApi.surveys()).surveys; },
+      accounts: async () => { internalSession.accounts = (await internalApi.accounts()).accounts; },
+      branches: async () => { internalSession.branches = (await internalApi.branches()).branches; },
+      "admin-catalog": async () => { internalSession.catalogs = await internalApi.catalogs(); }
+    };
+    if (loaders[view] && !internalSession.loaded.has(view)) {
+      await loaders[view]();
+      internalSession.loaded.add(view);
+      render(view);
+      return;
+    }
+    if (!internalSession.dashboard) internalSession.dashboard = await internalApi.dashboard();
+    const accountCount = document.querySelector("#accountCount");
+    const customerCount = document.querySelector("#customerCount");
+    const feedbackCount = document.querySelector("#feedbackCount");
+    if (accountCount) accountCount.textContent = internalSession.dashboard.summary.totalAccounts;
+    if (customerCount) customerCount.textContent = internalSession.dashboard.summary.totalCustomers;
+    if (feedbackCount) feedbackCount.textContent = internalSession.dashboard.summary.newFeedback;
+    const name = internalSession.account.tenDangNhap;
+    document.querySelector("#userInitials").textContent = initials(name);
+    document.querySelector("#userName").textContent = name;
+    document.querySelector("#userRole").textContent = internalSession.account.role === "admin" ? "Quản trị viên" : `Manager · ${internalSession.account.tenChiNhanh || "Toàn chuỗi"}`;
+    document.querySelectorAll(".feedback-update").forEach(button => button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        const reply = window.prompt("Nhập nội dung phản hồi gửi đến khách hàng (có thể để trống):", "") ?? "";
+        await internalApi.updateFeedback(button.dataset.feedbackId, button.dataset.status, reply);
+        internalSession.loaded.delete("feedback");
+        notify("Đã cập nhật trạng thái phản hồi");
+        render("feedback");
+      } catch (error) { notify(error.message); button.disabled = false; }
+    }));
+    if (view === "create-survey") {
+      document.querySelector("#addSurveyQuestion").addEventListener("click", () => {
+        document.querySelector("#surveyQuestions").insertAdjacentHTML("beforeend", `<div class="form-grid survey-question-input"><label>Câu hỏi *<input name="question" required /></label><label>Các lựa chọn *<input name="choices" placeholder="Lựa chọn 1; Lựa chọn 2" required /></label></div>`);
+      });
+      document.querySelector("#bulkSurveyForm").addEventListener("submit", async event => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const payload = formPayload(form);
+        const questions = [...form.querySelectorAll(".survey-question-input")].map(row => ({ content: row.querySelector('[name="question"]').value.trim(), choices: row.querySelector('[name="choices"]').value.split(";").map(value => value.trim()).filter(Boolean) }));
+        const button = form.querySelector("button[type='submit']");
+        button.dataset.label = "Phát hành và thông báo";
+        setFormBusy(form, true);
+        try {
+          const result = await internalApi.createSurvey({ title: payload.title, description: payload.description, endAt: new Date(payload.endAt).toISOString(), questions });
+          internalSession.loaded.delete("surveys");
+          notify(`Đã gửi khảo sát đến ${result.recipients} khách hàng`);
+          render("surveys");
+        } catch (error) { notify(error.message); setFormBusy(form, false); }
+      });
+    }
+  } catch (error) {
+    notify(error.message);
+    if (error.status === 401 || error.status === 403) {
+      internalApi.logout();
+      internalSession.account = null;
+      internalSession.loaded.clear();
+      render("internal-login");
+    }
+  }
+}
+
 function render(view = "dashboard") {
   const views = currentRole === "admin" ? adminViews : currentRole === "manager" ? managerViews : customerViews;
   if (!views[view]) view = currentRole === "admin" ? "admin-dashboard" : currentRole === "manager" ? "dashboard" : "customer-home";
@@ -237,16 +380,18 @@ function render(view = "dashboard") {
   document.querySelectorAll("[data-view]").forEach(el => { el.onclick = () => render(el.dataset.view); });
   document.querySelectorAll(".action-toast").forEach(el => { el.onclick = () => notify(); });
   document.querySelector("#addCustomer")?.addEventListener("click", () => notify("Đã mở luồng thêm khách hàng tại quầy"));
-  document.querySelector("#customerSearch")?.addEventListener("input", e => { const q = e.target.value.toLowerCase(); const filtered = customers.filter(c => `${c.name} ${c.code} ${c.preference}`.toLowerCase().includes(q)); document.querySelector("#customerResults").innerHTML = customerTable(filtered); });
+  document.querySelector("#customerSearch")?.addEventListener("input", e => { const q = e.target.value.toLowerCase(); const filtered = internalSession.customers.filter(c => `${c.name} ${c.code} ${c.preference}`.toLowerCase().includes(q)); document.querySelector("#customerResults").innerHTML = customerTable(filtered); });
   document.querySelectorAll("#startSurvey").forEach(el => el.addEventListener("click", () => render("my-surveys")));
   setupCustomerPage(view);
+  setupInternalPage(view);
 }
 
 function applyRole(role) {
   currentRole = role;
   document.body.dataset.role = role;
   const guestNav = `<p class="nav-label">Tài khoản khách hàng</p><button class="nav-item" data-view="login"><span class="icon">→</span>Đăng nhập</button><button class="nav-item" data-view="register"><span class="icon">＋</span>Đăng ký thành viên</button>`;
-  document.querySelector("#mainNav").innerHTML = role === "customer" && !customerApi.hasToken() ? guestNav : navs[role];
+  const internalGuest = role !== "customer" && !internalApi.hasToken();
+  document.querySelector("#mainNav").innerHTML = role === "customer" && !customerApi.hasToken() ? guestNav : internalGuest ? `<p class="nav-label">Khu vực nội bộ</p><button class="nav-item" data-view="internal-login"><span class="icon">→</span>Đăng nhập</button>` : navs[role];
   const customer = role === "customer"; const admin = role === "admin";
   document.querySelector("#userInitials").textContent = customer ? (customerApi.hasToken() ? "KH" : "?") : admin ? "AD" : "NQ";
   document.querySelector("#userName").textContent = customer ? (customerApi.hasToken() ? "Đang tải hồ sơ" : "Khách ghé thăm") : admin ? "System Admin" : "Nguyễn Quản Lý";
@@ -255,13 +400,21 @@ function applyRole(role) {
   document.querySelector("#globalSearch").placeholder = customer ? "Tìm trợ giúp..." : admin ? "Tìm tài khoản..." : "Tìm khách hàng...";
   document.querySelector("#roleSelect").value = role;
   const footerButton = document.querySelector(".sidebar-footer button");
-  footerButton.setAttribute("aria-label", customer && customerApi.hasToken() ? "Đăng xuất" : "Tùy chọn");
-  footerButton.onclick = customer && customerApi.hasToken() ? () => { customerApi.logout(); customerSession.profile = null; notify("Đã đăng xuất"); applyRole("customer"); } : null;
-  render(customer ? (customerApi.hasToken() ? "customer-home" : "login") : admin ? "admin-dashboard" : "dashboard");
+  const authenticated = customer ? customerApi.hasToken() : internalApi.hasToken();
+  footerButton.setAttribute("aria-label", authenticated ? "Đăng xuất" : "Tùy chọn");
+  footerButton.onclick = authenticated ? () => {
+    if (customer) { customerApi.logout(); customerSession.profile = null; }
+    else { internalApi.logout(); internalSession.account = null; internalSession.loaded.clear(); }
+    notify("Đã đăng xuất"); applyRole(role);
+  } : null;
+  render(customer ? (customerApi.hasToken() ? "customer-home" : "login") : internalApi.hasToken() ? (admin ? "admin-dashboard" : "dashboard") : "internal-login");
 }
 
 document.querySelector("#menuButton").addEventListener("click", () => document.querySelector("#sidebar").classList.toggle("open"));
-document.querySelector("#roleSelect").addEventListener("change", e => applyRole(e.target.value));
+document.querySelector("#roleSelect").addEventListener("change", event => {
+  const routes = { admin: "http://127.0.0.1:4173/", manager: "http://127.0.0.1:4174/", customer: "http://127.0.0.1:4175/" };
+  window.location.assign(routes[event.target.value]);
+});
 document.addEventListener("keydown", e => { if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); document.querySelector("#globalSearch").focus(); } });
 document.querySelector("#globalSearch").addEventListener("keydown", e => { if (e.key === "Enter" && currentRole === "manager") { render("customers"); setTimeout(() => { const input = document.querySelector("#customerSearch"); input.value = e.target.value; input.dispatchEvent(new Event("input")); }, 0); } });
 document.title = APP_CONFIG.name;

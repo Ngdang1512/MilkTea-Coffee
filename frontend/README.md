@@ -19,8 +19,16 @@ frontend/
 
 Chạy `npm run dev`, sau đó mở:
 
-- Admin: `http://localhost:4173/` hoặc `/admin`
-- Manager: `http://localhost:4173/manager`
-- Customer: `http://localhost:4173/customer`
+- Admin: `http://127.0.0.1:4173/`
+- Manager: `http://127.0.0.1:4174/`
+- Customer: `http://127.0.0.1:4175/`
+
+Mỗi cổng dùng đường dẫn và phiên đăng nhập riêng, vì vậy có thể mở đồng thời trên nhiều tab:
+
+- Admin dùng cổng `4173`.
+- Manager dùng cổng `4174`.
+- Customer dùng cổng `4175`.
 
 Khu Customer gọi REST API tại `http://localhost:3000`. Cần khởi động `api/` và PostgreSQL trước khi đăng ký, đăng nhập, cập nhật hồ sơ, gửi phản hồi hoặc làm khảo sát.
+
+Khu Admin/Manager cũng gọi API này và yêu cầu đăng nhập nội bộ. Dữ liệu dashboard, khách hàng, phản hồi, khảo sát, tài khoản, chi nhánh và danh mục được đọc trực tiếp từ PostgreSQL. Tài khoản demo: `admin` hoặc `quanly`, mật khẩu `DemoCRM@2026`.

@@ -48,7 +48,22 @@ final class CustomerController
         if ($method === 'POST' && preg_match('#^/me/surveys/(\d+)/submit$#', $path, $matches)) {
             $this->submitSurvey($customerId, (int) $matches[1], Http::body());
         }
+        if ($method === 'GET' && $path === '/me/notifications') {
+            Http::json(200, ['notifications' => $this->notifications($customerId)]);
+        }
+        if ($method === 'PATCH' && preg_match('#^/me/notifications/(\d+)$#', $path, $matches)) {
+            $statement = $this->db->prepare('UPDATE thong_bao SET da_doc=true,ngay_doc=coalesce(ngay_doc,clock_timestamp()) WHERE id=:notification AND tai_khoan_id=:customer');
+            $statement->execute(['notification' => (int) $matches[1], 'customer' => $customerId]);
+            Http::json(200, ['message' => 'Đã đọc thông báo']);
+        }
         return false;
+    }
+
+    private function notifications(int $customerId): array
+    {
+        $statement = $this->db->prepare('SELECT id,loai AS type,tieu_de AS title,noi_dung AS content,lien_ket AS link,da_doc AS read,ngay_tao AS "createdAt" FROM thong_bao WHERE tai_khoan_id=:customer ORDER BY ngay_tao DESC,id DESC LIMIT 50');
+        $statement->execute(['customer' => $customerId]);
+        return $statement->fetchAll();
     }
 
     private function catalogOptions(): array
@@ -183,7 +198,8 @@ final class CustomerController
     {
         $statement = $this->db->prepare(<<<'SQL'
             SELECT p.id,d.ten_do_uong AS "tenDoUong",b.ten_chi_nhanh AS "tenChiNhanh",p.so_sao AS "soSao",
-                   p.noi_dung AS "noiDung",p.trang_thai AS "trangThai",p.ngay_gui AS "ngayGui"
+                   p.noi_dung AS "noiDung",p.trang_thai AS "trangThai",p.ngay_gui AS "ngayGui",
+                   p.phan_hoi_cua_nhan_vien AS "phanHoiCuaNhanVien",p.ngay_phan_hoi AS "ngayPhanHoi"
               FROM phan_hoi p JOIN do_uong d ON d.id=p.do_uong_id LEFT JOIN chi_nhanh b ON b.id=p.chi_nhanh_id
              WHERE p.khach_hang_id=:id ORDER BY p.ngay_gui DESC,p.id DESC
         SQL);

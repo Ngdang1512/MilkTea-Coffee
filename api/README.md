@@ -22,7 +22,7 @@ cd api
 ```
 
 Trong `.env`, dùng `DB_DSN=pgsql:host=localhost;port=5432;dbname=crm_tra_sua_ca_phe`. PostgreSQL phải đang nhận kết nối tại `localhost:5432`.
-`FRONTEND_ORIGINS` cho phép cả `http://localhost:4173` và `http://127.0.0.1:4173` khi phát triển cục bộ.
+`FRONTEND_ORIGINS` cho phép ba giao diện tách biệt tại `127.0.0.1:4173`, `127.0.0.1:4174` và `127.0.0.1:4175` khi phát triển cục bộ.
 
 ## Customer API đã triển khai
 
@@ -39,6 +39,25 @@ Trong `.env`, dùng `DB_DSN=pgsql:host=localhost;port=5432;dbname=crm_tra_sua_ca
 | `POST` | `/me/surveys/{id}/submit` | Nộp nguyên tử bằng `crm_nop_khao_sat` |
 
 Các endpoint `/me/...` dùng header `Authorization: Bearer <token>`. Backend luôn lấy ID khách hàng từ token và kiểm tra lại trạng thái tài khoản trong PostgreSQL.
+
+## Admin/Manager API
+
+Đăng nhập nội bộ bằng `POST /internal/auth/login`. Các endpoint còn lại dùng Bearer token và chỉ chấp nhận vai trò `admin` hoặc `manager`:
+
+| Method | Endpoint | Chức năng |
+|---|---|---|
+| `GET` | `/internal/me` | Tài khoản và quyền hiện tại |
+| `GET` | `/internal/dashboard` | Chỉ số tổng hợp từ PostgreSQL |
+| `GET` | `/internal/customers` | Danh sách khách hàng |
+| `GET/PATCH` | `/internal/feedback[/{id}]` | Danh sách và xử lý phản hồi |
+| `GET/POST` | `/internal/surveys` | Tiến độ hoặc tạo và phát hành khảo sát hàng loạt |
+| `GET` | `/internal/accounts` | Tài khoản nội bộ, chỉ dành cho Admin |
+| `GET` | `/internal/branches` | Danh sách chi nhánh |
+| `GET` | `/internal/catalogs` | Đồ uống và nhóm sở thích |
+
+Tài khoản demo: `admin` hoặc `quanly`, mật khẩu `DemoCRM@2026`.
+
+Khi khảo sát được phát hành, hệ thống tạo thông báo cho toàn bộ khách hàng nhận khảo sát. Khách đọc thông báo qua `GET /me/notifications` và đánh dấu đã đọc bằng `PATCH /me/notifications/{id}`. Khi Admin/Manager trả lời một đánh giá, nội dung trả lời cũng được gửi thành thông báo cho đúng khách hàng.
 
 ## Cấu trúc hiện tại
 

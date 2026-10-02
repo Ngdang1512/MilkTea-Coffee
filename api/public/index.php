@@ -5,6 +5,7 @@ use App\Config;
 use App\CustomerController;
 use App\Database;
 use App\Http;
+use App\InternalController;
 
 require dirname(__DIR__) . '/src/bootstrap.php';
 
@@ -37,6 +38,11 @@ try {
 
     $controller = new CustomerController(Database::pdo());
     if ($controller->handle($method, $path)) {
+        exit;
+    }
+
+    $internalController = new InternalController(Database::pdo());
+    if ($internalController->handle($method, $path)) {
         exit;
     }
 

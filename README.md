@@ -15,9 +15,9 @@ cd frontend
 npm run dev
 ```
 
-- Admin: `http://localhost:4173/admin`
-- Manager: `http://localhost:4173/manager`
-- Customer: `http://localhost:4173/customer`
+- Admin: `http://127.0.0.1:4173/`
+- Manager: `http://127.0.0.1:4174/`
+- Customer: `http://127.0.0.1:4175/`
 
 Chạy API ở terminal khác:
 
