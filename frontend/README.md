@@ -22,3 +22,5 @@ Chạy `npm run dev`, sau đó mở:
 - Admin: `http://localhost:4173/` hoặc `/admin`
 - Manager: `http://localhost:4173/manager`
 - Customer: `http://localhost:4173/customer`
+
+Khu Customer gọi REST API tại `http://localhost:3000`. Cần khởi động `api/` và PostgreSQL trước khi đăng ký, đăng nhập, cập nhật hồ sơ, gửi phản hồi hoặc làm khảo sát.
