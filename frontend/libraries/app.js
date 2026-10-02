@@ -1,5 +1,9 @@
 import { customers } from "../models/customers.js";
 import { APP_CONFIG } from "../configs/app-config.js";
+import { customerApi } from "./api-client.js";
+
+const customerSession = { profile: null, options: null, currentSurvey: null, questionIndex: 0, answers: [] };
+const escapeHtml = value => String(value ?? "").replace(/[&<>"]/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[character]);
 
 const icons = { up: "↗", down: "↘" };
 const metric = (label, value, delta, note, color, direction = "up") => `<article class="metric-card"><div class="metric-head"><span class="metric-icon ${color}">${color === "green" ? "♧" : color === "amber" ? "◌" : color === "blue" ? "✓" : "☆"}</span><button>•••</button></div><p>${label}</p><div class="metric-value">${value}</div><footer><span class="${direction}">${icons[direction]} ${delta}</span><small>${note}</small></footer></article>`;
@@ -55,34 +59,50 @@ function adminCatalogView() {
   return `<section class="page-heading compact"><div><p class="eyebrow">DANH MỤC HỆ THỐNG</p><h1>Danh mục</h1><p>Quản lý nhóm sở thích và đồ uống dùng trong CRM.</p></div><button class="primary action-toast">＋ Thêm danh mục</button></section><section class="catalog-layout"><article class="panel"><div class="panel-title"><div><h2>Nhóm sở thích</h2><p>4 nhóm đang được sử dụng</p></div></div>${["Trà sữa truyền thống","Cà phê muối","Trà trái cây nhiệt đới","Ít ngọt / Healthy"].map((x,i)=>`<div class="catalog-row"><span class="catalog-icon">${i+1}</span><div><strong>${x}</strong><small>${[624,418,782,424][i]} khách hàng</small></div><span class="status active">Đang dùng</span><button class="row-menu">•••</button></div>`).join("")}</article><article class="panel"><div class="panel-title"><div><h2>Đồ uống nổi bật</h2><p>42 sản phẩm đang kinh doanh</p></div><button class="text-button">Xem tất cả →</button></div>${["Trà đào cam sả","Cà phê muối","Trà sữa ô long","Matcha latte"].map((x,i)=>`<div class="catalog-row"><span class="drink-dot ${["green","amber","blue","rose"][i]}">☕</span><div><strong>${x}</strong><small>DU-00${i+1}</small></div><span class="status active">Kinh doanh</span><button class="row-menu">•••</button></div>`).join("")}</article></section>`;
 }
 
+function loginView() {
+  return `<section class="auth-shell"><div class="auth-story"><span class="welcome-chip">MILKTEA-COFFEE CRM</span><h1>Chào mừng bạn<br/>quay trở lại.</h1><p>Đăng nhập để cập nhật sở thích, gửi phản hồi và thực hiện khảo sát dành riêng cho bạn.</p><div class="auth-quote"><span>☕</span><p>“Mỗi góp ý của bạn giúp một ly nước ngày mai ngon hơn.”</p></div></div><form class="auth-card" id="loginForm"><div class="form-heading"><p class="eyebrow">KHU VỰC KHÁCH HÀNG</p><h2>Đăng nhập</h2><p>Sử dụng tài khoản thành viên của bạn.</p></div><label>Tên đăng nhập<input name="tenDangNhap" autocomplete="username" placeholder="Ví dụ: khach01" required /></label><label>Mật khẩu<input name="matKhau" type="password" autocomplete="current-password" placeholder="Nhập mật khẩu" required /></label><div class="auth-error" id="authError" role="alert"></div><button class="primary auth-submit" type="submit">Đăng nhập →</button><p class="auth-switch">Chưa có tài khoản? <button type="button" data-view="register">Đăng ký thành viên</button></p><small>Tài khoản demo: khach01 / DemoCRM@2026</small></form></section>`;
+}
+
+function registerView() {
+  return `<section class="auth-shell"><div class="auth-story register-story"><span class="welcome-chip">THÀNH VIÊN MỚI</span><h1>Gia nhập cộng đồng<br/>milktea-coffee.</h1><p>Chia sẻ khẩu vị để chúng tôi hiểu bạn hơn trong mỗi lần ghé.</p><div class="auth-quote"><span>✦</span><p>Tài khoản được dùng chung tại mọi chi nhánh trong chuỗi.</p></div></div><form class="auth-card register-card" id="registerForm"><div class="form-heading"><p class="eyebrow">TẠO TÀI KHOẢN</p><h2>Đăng ký thành viên</h2><p>Điền đầy đủ thông tin bắt buộc bên dưới.</p></div><div class="form-grid"><label>Tên đăng nhập *<input name="tenDangNhap" minlength="3" maxlength="100" required /></label><label>Mật khẩu *<input name="matKhau" type="password" minlength="8" maxlength="128" required /></label><label>Họ và tên *<input name="hoTen" maxlength="150" required /></label><label>Năm sinh *<input name="namSinh" type="number" min="1900" max="${new Date().getFullYear()}" required /></label><label>Giới tính<select name="gioiTinh"><option value="khong_cung_cap">Không cung cấp</option><option value="nam">Nam</option><option value="nu">Nữ</option><option value="khac">Khác</option></select></label><label>Sở thích mặc định *<select name="soThichId" id="registerPreference" required><option value="">Đang tải...</option></select></label></div><div class="auth-error" id="authError" role="alert"></div><button class="primary auth-submit" type="submit">Tạo tài khoản →</button><p class="auth-switch">Đã có tài khoản? <button type="button" data-view="login">Đăng nhập</button></p></form></section>`;
+}
+
 function customerHome() {
-  return `<section class="customer-hero"><div><span class="welcome-chip">HẠNG THÀNH VIÊN · GREEN</span><h1>Xin chào, Minh Long!</h1><p>Một ngày thật dịu dàng cùng ly trà bạn yêu thích.</p><div class="member-code"><span>Mã thành viên</span><strong>MT-00248</strong></div></div><div class="hero-cup" aria-hidden="true"><span>MC</span></div></section>
+  const profile = customerSession.profile || { hoTen: "bạn", maThanhVien: "—" };
+  return `<section class="customer-hero"><div><span class="welcome-chip">THÀNH VIÊN MILKTEA-COFFEE</span><h1>Xin chào, ${escapeHtml(profile.hoTen)}!</h1><p>Một ngày thật dịu dàng cùng ly trà bạn yêu thích.</p><div class="member-code"><span>Mã thành viên</span><strong>${escapeHtml(profile.maThanhVien)}</strong></div></div><div class="hero-cup" aria-hidden="true"><span>MC</span></div></section>
   <section class="customer-stats"><article><span class="soft-icon">✓</span><div><small>Khảo sát đã hoàn thành</small><strong>06</strong><p>2 khảo sát trong tháng này</p></div></article><article><span class="soft-icon amber">☆</span><div><small>Đánh giá trung bình</small><strong>4,8</strong><p>Cảm ơn những chia sẻ của bạn</p></div></article><article><span class="soft-icon rose">◌</span><div><small>Phản hồi đã gửi</small><strong>12</strong><p>100% đã được tiếp nhận</p></div></article></section>
   <section class="customer-layout"><div><div class="section-title"><div><p class="eyebrow">DÀNH CHO BẠN</p><h2>Khảo sát đang chờ</h2></div><button class="text-button" data-view="my-surveys">Xem tất cả →</button></div><article class="task-card"><div class="task-art">☕</div><div class="task-copy"><span class="status active">Đang mở</span><h3>Mức độ hài lòng tháng 09</h3><p>Chia sẻ trải nghiệm gần nhất của bạn tại milktea-coffee.</p><div class="task-meta"><span>◷ Khoảng 3 phút</span><span>▣ Hạn 30/09/2026</span></div></div><button class="primary" id="startSurvey">Bắt đầu →</button></article></div><aside class="panel quick-actions"><div class="panel-title"><div><h2>Truy cập nhanh</h2><p>Chúng tôi luôn muốn lắng nghe bạn</p></div></div><button data-view="my-feedback"><span>♡</span><div><strong>Gửi phản hồi</strong><small>Chia sẻ trải nghiệm đồ uống</small></div><b>→</b></button><button data-view="profile"><span>♧</span><div><strong>Cập nhật hồ sơ</strong><small>Sở thích và thông tin cá nhân</small></div><b>→</b></button></aside></section>`;
 }
 
 function profileView() {
-  return `<section class="page-heading compact"><div><p class="eyebrow">TÀI KHOẢN CỦA TÔI</p><h1>Hồ sơ cá nhân</h1><p>Thông tin này giúp chúng tôi mang đến trải nghiệm phù hợp hơn.</p></div><button class="outline">Thay đổi mật khẩu</button></section><section class="profile-layout"><aside class="panel profile-summary"><div class="large-avatar">NL</div><h2>Nguyễn Minh Long</h2><p>@khach01</p><span class="status active"><i></i>Đang hoạt động</span><dl><div><dt>Mã thành viên</dt><dd>MT-00248</dd></div><div><dt>Tham gia từ</dt><dd>12/03/2025</dd></div></dl></aside><form class="panel profile-form" id="profileForm"><div class="form-heading"><h2>Thông tin cơ bản</h2><p>Các trường có dấu * là bắt buộc.</p></div><div class="form-grid"><label>Họ và tên *<input value="Nguyễn Minh Long" required /></label><label>Năm sinh *<input type="number" value="2002" min="1900" max="2026" required /></label><label>Giới tính<select><option>Nam</option><option>Nữ</option><option>Khác</option><option>Không cung cấp</option></select></label><label>Sở thích mặc định *<select><option>Trà trái cây nhiệt đới</option><option>Trà sữa truyền thống</option><option>Cà phê muối</option><option>Ít ngọt / Healthy</option></select></label></div><div class="form-note">✦ Sở thích được dùng để cá nhân hóa khảo sát và gợi ý sản phẩm.</div><footer><button type="button" class="outline">Hủy thay đổi</button><button class="primary" type="submit">Lưu hồ sơ</button></footer></form></section>`;
+  const p = customerSession.profile || { hoTen: "Đang tải...", tenDangNhap: "", maThanhVien: "—", namSinh: "", gioiTinh: "khong_cung_cap", soThichId: "", ngayTao: null };
+  const initials = p.hoTen.split(/\s+/).slice(-2).map(word => word[0]).join("").toUpperCase();
+  return `<section class="page-heading compact"><div><p class="eyebrow">TÀI KHOẢN CỦA TÔI</p><h1>Hồ sơ cá nhân</h1><p>Thông tin này giúp chúng tôi mang đến trải nghiệm phù hợp hơn.</p></div></section><section class="profile-layout"><aside class="panel profile-summary"><div class="large-avatar">${escapeHtml(initials)}</div><h2>${escapeHtml(p.hoTen)}</h2><p>@${escapeHtml(p.tenDangNhap)}</p><span class="status active"><i></i>Đang hoạt động</span><dl><div><dt>Mã thành viên</dt><dd>${escapeHtml(p.maThanhVien)}</dd></div><div><dt>Tham gia từ</dt><dd>${p.ngayTao ? new Date(p.ngayTao).toLocaleDateString("vi-VN") : "—"}</dd></div></dl></aside><form class="panel profile-form" id="profileForm"><div class="form-heading"><h2>Thông tin cơ bản</h2><p>Các trường có dấu * là bắt buộc.</p></div><div class="form-grid"><label>Họ và tên *<input name="hoTen" value="${escapeHtml(p.hoTen)}" required /></label><label>Năm sinh *<input name="namSinh" type="number" value="${escapeHtml(p.namSinh)}" min="1900" max="${new Date().getFullYear()}" required /></label><label>Giới tính<select name="gioiTinh"><option value="nam" ${p.gioiTinh === "nam" ? "selected" : ""}>Nam</option><option value="nu" ${p.gioiTinh === "nu" ? "selected" : ""}>Nữ</option><option value="khac" ${p.gioiTinh === "khac" ? "selected" : ""}>Khác</option><option value="khong_cung_cap" ${p.gioiTinh === "khong_cung_cap" ? "selected" : ""}>Không cung cấp</option></select></label><label>Sở thích mặc định *<select name="soThichId" id="profilePreference"><option value="${escapeHtml(p.soThichId)}">${escapeHtml(p.soThich || "Đang tải...")}</option></select></label></div><div class="form-note">✦ Sở thích được dùng để cá nhân hóa khảo sát và gợi ý sản phẩm.</div><footer><button type="button" class="outline" data-view="customer-home">Hủy thay đổi</button><button class="primary" type="submit">Lưu hồ sơ</button></footer></form></section>`;
 }
 
 function myFeedbackView() {
-  return `<section class="page-heading compact"><div><p class="eyebrow">CHIA SẺ CÙNG CHÚNG TÔI</p><h1>Phản hồi của tôi</h1><p>Mỗi góp ý của bạn đều giúp milktea-coffee tốt hơn mỗi ngày.</p></div></section><section class="customer-layout feedback-layout"><form class="panel feedback-form" id="feedbackForm"><div class="form-heading"><h2>Gửi phản hồi mới</h2><p>Hãy kể cho chúng tôi về trải nghiệm gần nhất.</p></div><label>Đồ uống *<select required><option value="">Chọn đồ uống</option><option>Trà đào cam sả</option><option>Cà phê muối</option><option>Trà sữa ô long</option></select></label><label>Chi nhánh<select><option>Phản hồi chung về sản phẩm</option><option>Nguyễn Huệ</option><option>Lê Lợi</option></select></label><fieldset><legend>Mức độ hài lòng *</legend><div class="star-picker"><button type="button">★</button><button type="button">★</button><button type="button">★</button><button type="button">★</button><button type="button">★</button></div></fieldset><label>Nội dung phản hồi *<textarea rows="5" placeholder="Điều gì khiến bạn hài lòng hoặc chưa hài lòng?" required></textarea><small>Tối thiểu 10 ký tự</small></label><button class="primary" type="submit">Gửi phản hồi</button></form><div><div class="section-title"><div><p class="eyebrow">LỊCH SỬ</p><h2>Phản hồi gần đây</h2></div></div><article class="history-card"><div><strong>Trà đào cam sả</strong><span class="status active">Đã xem</span></div><p>Đồ uống ngon nhưng thời gian chờ hơi lâu.</p><small>★★★★☆ · Nguyễn Huệ · 24/09/2026</small></article><article class="history-card"><div><strong>Cà phê muối</strong><span class="status active">Đã tiếp thu</span></div><p>Vị cà phê cân bằng, nhân viên thân thiện.</p><small>★★★★★ · Lê Lợi · 02/09/2026</small></article></div></section>`;
+  return `<section class="page-heading compact"><div><p class="eyebrow">CHIA SẺ CÙNG CHÚNG TÔI</p><h1>Phản hồi của tôi</h1><p>Mỗi góp ý của bạn đều giúp milktea-coffee tốt hơn mỗi ngày.</p></div></section><section class="customer-layout feedback-layout"><form class="panel feedback-form" id="feedbackForm"><div class="form-heading"><h2>Gửi phản hồi mới</h2><p>Hãy kể cho chúng tôi về trải nghiệm gần nhất.</p></div><label>Đồ uống *<select name="doUongId" id="feedbackDrink" required><option value="">Đang tải...</option></select></label><label>Chi nhánh<select name="chiNhanhId" id="feedbackBranch"><option value="">Phản hồi chung về sản phẩm</option></select></label><fieldset><legend>Mức độ hài lòng *</legend><input type="hidden" name="soSao" id="feedbackRating" required /><div class="star-picker"><button type="button" data-rating="1">★</button><button type="button" data-rating="2">★</button><button type="button" data-rating="3">★</button><button type="button" data-rating="4">★</button><button type="button" data-rating="5">★</button></div></fieldset><label>Nội dung phản hồi *<textarea name="noiDung" rows="5" minlength="10" placeholder="Điều gì khiến bạn hài lòng hoặc chưa hài lòng?" required></textarea><small>Tối thiểu 10 ký tự</small></label><button class="primary" type="submit">Gửi phản hồi</button></form><div><div class="section-title"><div><p class="eyebrow">LỊCH SỬ</p><h2>Phản hồi gần đây</h2></div></div><div id="feedbackHistory"><article class="history-card"><p>Đang tải lịch sử phản hồi...</p></article></div></div></section>`;
 }
 
 function mySurveysView() {
-  return `<section class="page-heading compact"><div><p class="eyebrow">Ý KIẾN CỦA BẠN</p><h1>Khảo sát của tôi</h1><p>Các khảo sát được gửi riêng đến tài khoản của bạn.</p></div></section><div class="segmented"><button class="active">Đang chờ <b>1</b></button><button>Đã hoàn thành <b>6</b></button></div><section class="survey-list"><article class="panel my-survey featured"><div class="survey-number">01</div><div><span class="status active">Đang mở</span><h2>Mức độ hài lòng tháng 09</h2><p>5 câu hỏi · Khoảng 3 phút · Hạn trả lời 30/09/2026</p></div><button class="primary" id="startSurvey">Thực hiện ngay →</button></article><article class="panel my-survey"><div class="survey-number done">✓</div><div><span class="status locked">Đã hoàn thành</span><h2>Trải nghiệm tại cửa hàng</h2><p>Đã nộp lúc 14:32, ngày 15/09/2026</p></div><button class="outline action-toast">Xem chi tiết</button></article></section>`;
+  return `<section class="page-heading compact"><div><p class="eyebrow">Ý KIẾN CỦA BẠN</p><h1>Khảo sát của tôi</h1><p>Các khảo sát được gửi riêng đến tài khoản của bạn.</p></div></section><section class="survey-list" id="surveyList"><article class="panel my-survey"><div class="survey-number">…</div><div><h2>Đang tải khảo sát</h2><p>Vui lòng chờ trong giây lát.</p></div></article></section>`;
 }
 
 function surveyTakeView() {
-  return `<section class="survey-shell"><header><button class="back-link" data-view="my-surveys">← Quay lại</button><span>Câu 1 / 5</span></header><div class="progress"><i style="width:20%"></i></div><article class="survey-question"><p class="eyebrow">MỨC ĐỘ HÀI LÒNG THÁNG 09</p><h1>Bạn cảm thấy thế nào về hương vị đồ uống trong lần ghé gần nhất?</h1><p>Chọn một phương án phù hợp nhất với trải nghiệm của bạn.</p><div class="answer-list"><label><input type="radio" name="answer" /><span>😍</span><strong>Rất hài lòng</strong><i>○</i></label><label><input type="radio" name="answer" /><span>😊</span><strong>Hài lòng</strong><i>○</i></label><label><input type="radio" name="answer" /><span>😐</span><strong>Bình thường</strong><i>○</i></label><label><input type="radio" name="answer" /><span>😕</span><strong>Chưa hài lòng</strong><i>○</i></label></div><footer><small>Câu hỏi bắt buộc</small><button class="primary" id="nextQuestion">Tiếp tục →</button></footer></article></section>`;
+  const survey = customerSession.currentSurvey;
+  if (!survey) return `<section class="panel empty-state"><span>◷</span><h2>Đang tải khảo sát</h2><p>Vui lòng chờ trong giây lát.</p></section>`;
+  const index = customerSession.questionIndex;
+  const question = survey.questions[index];
+  const saved = customerSession.answers.find(item => item.cauHoiId === question.id)?.luaChonId;
+  return `<section class="survey-shell"><header><button class="back-link" data-view="my-surveys">← Quay lại</button><span>Câu ${index + 1} / ${survey.questions.length}</span></header><div class="progress"><i style="width:${((index + 1) / survey.questions.length) * 100}%"></i></div><article class="survey-question"><p class="eyebrow">${escapeHtml(survey.tieuDe).toUpperCase()}</p><h1>${escapeHtml(question.noiDung)}</h1><p>Chọn một phương án phù hợp nhất với trải nghiệm của bạn.</p><div class="answer-list">${question.luaChon.map((choice, choiceIndex) => `<label><input type="radio" name="answer" value="${choice.id}" ${Number(saved) === Number(choice.id) ? "checked" : ""}/><span>${["😍","😊","😐","☕"][choiceIndex] || "◇"}</span><strong>${escapeHtml(choice.noiDung)}</strong><i>○</i></label>`).join("")}</div><footer><small>${question.batBuoc ? "Câu hỏi bắt buộc" : "Có thể bỏ qua"}</small><button class="primary" id="nextQuestion">${index === survey.questions.length - 1 ? "Nộp khảo sát" : "Tiếp tục →"}</button></footer></article></section>`;
 }
 
 function placeholder(name, desc) { return `<section class="page-heading compact"><div><p class="eyebrow">MILKTEA-COFFEE</p><h1>${name}</h1><p>${desc}</p></div></section><section class="panel empty-state"><span>✦</span><h2>Khu vực đang được hoàn thiện</h2><p>Cấu trúc màn hình đã sẵn sàng để kết nối endpoint tương ứng trong REST API.</p><button class="primary action-toast">Xem tài liệu API</button></section>`; }
 
 const adminViews = { "admin-dashboard": adminDashboard, accounts: accountsView, branches: branchesView, "admin-catalog": adminCatalogView, settings: () => placeholder("Cài đặt hệ thống", "Bảo mật, sao lưu và cấu hình vận hành hệ thống.") };
 const managerViews = { dashboard, customers: customersView, feedback: feedbackView, surveys: surveysView, reports: () => placeholder("Báo cáo & phân tích", "Theo dõi khách hàng, phản hồi và hiệu quả khảo sát.") };
-const customerViews = { "customer-home": customerHome, profile: profileView, "my-feedback": myFeedbackView, "my-surveys": mySurveysView, "take-survey": surveyTakeView };
-const titles = { "admin-dashboard": "Quản trị", accounts: "Tài khoản nội bộ", branches: "Chi nhánh", "admin-catalog": "Danh mục", dashboard: "Tổng quan", customers: "Khách hàng", feedback: "Phản hồi", surveys: "Khảo sát", reports: "Báo cáo", settings: "Cài đặt", "customer-home": "Trang chủ", profile: "Hồ sơ", "my-feedback": "Phản hồi của tôi", "my-surveys": "Khảo sát của tôi", "take-survey": "Thực hiện khảo sát" };
+const customerViews = { login: loginView, register: registerView, "customer-home": customerHome, profile: profileView, "my-feedback": myFeedbackView, "my-surveys": mySurveysView, "take-survey": surveyTakeView };
+const titles = { "admin-dashboard": "Quản trị", accounts: "Tài khoản nội bộ", branches: "Chi nhánh", "admin-catalog": "Danh mục", dashboard: "Tổng quan", customers: "Khách hàng", feedback: "Phản hồi", surveys: "Khảo sát", reports: "Báo cáo", settings: "Cài đặt", login: "Đăng nhập", register: "Đăng ký", "customer-home": "Trang chủ", profile: "Hồ sơ", "my-feedback": "Phản hồi của tôi", "my-surveys": "Khảo sát của tôi", "take-survey": "Thực hiện khảo sát" };
 const navs = {
   admin: `<p class="nav-label">Quản trị hệ thống</p><button class="nav-item" data-view="admin-dashboard"><span class="icon">⌂</span>Tổng quan</button><button class="nav-item" data-view="accounts"><span class="icon">♧</span>Tài khoản <b>24</b></button><button class="nav-item" data-view="branches"><span class="icon">⌖</span>Chi nhánh</button><button class="nav-item" data-view="admin-catalog"><span class="icon">◇</span>Danh mục</button><p class="nav-label">Vận hành</p><button class="nav-item" data-view="settings"><span class="icon">⚙</span>Cài đặt hệ thống</button>`,
   manager: `<p class="nav-label">Không gian làm việc</p><button class="nav-item" data-view="dashboard"><span class="icon">⌂</span>Tổng quan</button><button class="nav-item" data-view="customers"><span class="icon">♧</span>Khách hàng <b>248</b></button><button class="nav-item" data-view="feedback"><span class="icon">◌</span>Phản hồi <i>8</i></button><button class="nav-item" data-view="surveys"><span class="icon">✓</span>Khảo sát</button><button class="nav-item" data-view="reports"><span class="icon">⌁</span>Báo cáo</button>`,
@@ -91,37 +111,153 @@ const navs = {
 const app = document.querySelector("#app");
 const toast = document.querySelector("#toast");
 let currentRole = "manager";
+let feedbackSubmitting = false;
 
 function notify(message = "Tính năng đã sẵn sàng để kết nối API") { toast.textContent = message; toast.classList.add("show"); setTimeout(() => toast.classList.remove("show"), 2400); }
+function formPayload(form) { return Object.fromEntries(new FormData(form).entries()); }
+function setFormBusy(form, busy) { const button = form.querySelector("button[type='submit']"); button.disabled = busy; button.textContent = busy ? "Đang xử lý..." : button.dataset.label || button.textContent; }
+
+async function setupCustomerPage(view) {
+  if (currentRole !== "customer") return;
+  const errorBox = document.querySelector("#authError");
+  const showError = error => { if (errorBox) errorBox.textContent = error.message; else notify(error.message); };
+
+  if (view === "register") {
+    try {
+      customerSession.options ||= await customerApi.options();
+      const select = document.querySelector("#registerPreference");
+      select.innerHTML = `<option value="">Chọn sở thích</option>${customerSession.options.preferences.map(item => `<option value="${item.id}">${item.tenNhom}</option>`).join("")}`;
+    } catch (error) { showError(error); }
+  }
+
+  document.querySelector("#loginForm")?.addEventListener("submit", async event => {
+    event.preventDefault(); const form = event.currentTarget; const button = form.querySelector("button[type='submit']"); button.dataset.label = "Đăng nhập →"; setFormBusy(form, true);
+    try {
+      const data = await customerApi.login(formPayload(form)); customerSession.profile = data.profile;
+      notify("Đăng nhập thành công"); applyRole("customer");
+    } catch (error) { showError(error); setFormBusy(form, false); }
+  });
+
+  document.querySelector("#registerForm")?.addEventListener("submit", async event => {
+    event.preventDefault(); const form = event.currentTarget; const button = form.querySelector("button[type='submit']"); button.dataset.label = "Tạo tài khoản →"; setFormBusy(form, true);
+    try {
+      const payload = formPayload(form); payload.namSinh = Number(payload.namSinh); payload.soThichId = Number(payload.soThichId);
+      const data = await customerApi.register(payload); customerSession.profile = data.profile;
+      notify("Đăng ký thành công"); applyRole("customer");
+    } catch (error) { showError(error); setFormBusy(form, false); }
+  });
+
+  if (!customerApi.hasToken() || ["login", "register"].includes(view)) return;
+  try {
+    const profileWasMissing = !customerSession.profile;
+    if (profileWasMissing) customerSession.profile = (await customerApi.me()).profile;
+    const profile = customerSession.profile;
+    document.querySelector("#userInitials").textContent = profile.hoTen.split(/\s+/).slice(-2).map(word => word[0]).join("").toUpperCase();
+    document.querySelector("#userName").textContent = profile.hoTen;
+    document.querySelector("#userRole").textContent = `Khách hàng · ${profile.maThanhVien}`;
+    if (profileWasMissing && ["profile", "customer-home"].includes(view)) { render(view); return; }
+
+    if (["profile", "my-feedback"].includes(view)) customerSession.options ||= await customerApi.options();
+    if (view === "profile") {
+      const select = document.querySelector("#profilePreference");
+      select.innerHTML = customerSession.options.preferences.map(item => `<option value="${item.id}" ${Number(profile.soThichId) === Number(item.id) ? "selected" : ""}>${escapeHtml(item.tenNhom)}</option>`).join("");
+      document.querySelector("#profileForm").addEventListener("submit", async event => {
+        event.preventDefault(); const form = event.currentTarget; const button = form.querySelector("button[type='submit']"); button.dataset.label = "Lưu hồ sơ"; setFormBusy(form, true);
+        try {
+          const payload = formPayload(form); payload.namSinh = Number(payload.namSinh); payload.soThichId = Number(payload.soThichId);
+          customerSession.profile = (await customerApi.updateMe(payload)).profile; notify("Đã cập nhật hồ sơ thành công"); render("profile");
+        } catch (error) { notify(error.message); setFormBusy(form, false); }
+      });
+    }
+
+    if (view === "my-feedback") {
+      document.querySelector("#feedbackDrink").innerHTML = `<option value="">Chọn đồ uống</option>${customerSession.options.drinks.map(item => `<option value="${item.id}">${escapeHtml(item.tenDoUong)}</option>`).join("")}`;
+      document.querySelector("#feedbackBranch").innerHTML = `<option value="">Phản hồi chung về sản phẩm</option>${customerSession.options.branches.map(item => `<option value="${item.id}">${escapeHtml(item.tenChiNhanh)}</option>`).join("")}`;
+      const history = (await customerApi.feedback()).feedback;
+      document.querySelector("#feedbackHistory").innerHTML = history.length ? history.map(item => `<article class="history-card"><div><strong>${escapeHtml(item.tenDoUong)}</strong><span class="status active">${escapeHtml(item.trangThai === "moi" ? "Mới" : item.trangThai === "da_xem" ? "Đã xem" : "Đã tiếp thu")}</span></div><p>${escapeHtml(item.noiDung)}</p><small>${"★".repeat(item.soSao)}${"☆".repeat(5-item.soSao)} · ${escapeHtml(item.tenChiNhanh || "Phản hồi chung")} · ${new Date(item.ngayGui).toLocaleDateString("vi-VN")}</small></article>`).join("") : `<article class="history-card"><p>Bạn chưa gửi phản hồi nào.</p></article>`;
+      document.querySelectorAll(".star-picker button").forEach((star, index, all) => star.addEventListener("click", () => { document.querySelector("#feedbackRating").value = star.dataset.rating; all.forEach((item, i) => item.classList.toggle("picked", i <= index)); }));
+      document.querySelector("#feedbackForm").addEventListener("submit", async event => {
+        event.preventDefault();
+        if (feedbackSubmitting) return;
+        feedbackSubmitting = true;
+        const form = event.currentTarget; const payload = formPayload(form); payload.doUongId = Number(payload.doUongId); payload.chiNhanhId = payload.chiNhanhId ? Number(payload.chiNhanhId) : null; payload.soSao = Number(payload.soSao);
+        const button = form.querySelector("button[type='submit']"); button.dataset.label = "Gửi phản hồi"; setFormBusy(form, true);
+        try { await customerApi.sendFeedback(payload); notify("Cảm ơn bạn! Phản hồi đã được gửi"); feedbackSubmitting = false; render("my-feedback"); }
+        catch (error) { feedbackSubmitting = false; notify(error.message); setFormBusy(form, false); }
+      });
+    }
+
+    if (view === "my-surveys") {
+      const surveys = (await customerApi.surveys()).surveys;
+      const list = document.querySelector("#surveyList");
+      list.innerHTML = surveys.length ? surveys.map((survey, index) => {
+        const completed = Boolean(survey.ngayHoanThanh);
+        const expired = survey.ngayKetThuc && new Date(survey.ngayKetThuc) <= new Date();
+        const available = !completed && !expired && survey.trangThai === "dang_mo";
+        const state = completed ? "Đã hoàn thành" : expired || survey.trangThai === "da_dong" ? "Đã đóng" : "Đang mở";
+        return `<article class="panel my-survey ${available ? "featured" : ""}"><div class="survey-number ${completed ? "done" : ""}">${completed ? "✓" : String(index + 1).padStart(2,"0")}</div><div><span class="status ${available ? "active" : "locked"}">${state}</span><h2>${escapeHtml(survey.tieuDe)}</h2><p>${survey.soCauHoi} câu hỏi · ${survey.ngayKetThuc ? `Hạn ${new Date(survey.ngayKetThuc).toLocaleDateString("vi-VN")}` : "Không giới hạn thời gian"}</p></div>${available ? `<button class="primary survey-start" data-survey-id="${survey.id}">Thực hiện ngay →</button>` : `<button class="outline" disabled>${completed ? "Đã nộp" : "Không khả dụng"}</button>`}</article>`;
+      }).join("") : `<article class="panel empty-state"><span>✓</span><h2>Chưa có khảo sát</h2><p>Khi có khảo sát mới, bạn sẽ thấy tại đây.</p></article>`;
+      document.querySelectorAll(".survey-start").forEach(button => button.addEventListener("click", async () => {
+        try {
+          customerSession.currentSurvey = (await customerApi.survey(button.dataset.surveyId)).survey;
+          customerSession.questionIndex = 0; customerSession.answers = []; render("take-survey");
+        } catch (error) { notify(error.message); }
+      }));
+    }
+
+    if (view === "take-survey" && customerSession.currentSurvey) {
+      document.querySelector("#nextQuestion")?.addEventListener("click", async () => {
+        const survey = customerSession.currentSurvey;
+        const question = survey.questions[customerSession.questionIndex];
+        const selected = document.querySelector("input[name='answer']:checked");
+        if (!selected && question.batBuoc) { notify("Vui lòng chọn một câu trả lời"); return; }
+        if (selected) {
+          customerSession.answers = customerSession.answers.filter(item => item.cauHoiId !== question.id);
+          customerSession.answers.push({ cauHoiId: question.id, luaChonId: Number(selected.value) });
+        }
+        if (customerSession.questionIndex < survey.questions.length - 1) { customerSession.questionIndex += 1; render("take-survey"); return; }
+        try {
+          await customerApi.submitSurvey(survey.id, customerSession.answers); notify("Nộp khảo sát thành công");
+          customerSession.currentSurvey = null; customerSession.questionIndex = 0; customerSession.answers = []; render("my-surveys");
+        } catch (error) { notify(error.message); }
+      });
+    }
+  } catch (error) {
+    notify(error.message);
+    if (error.status === 401) { customerSession.profile = null; customerApi.logout(); applyRole("customer"); }
+  }
+}
+
 function render(view = "dashboard") {
   const views = currentRole === "admin" ? adminViews : currentRole === "manager" ? managerViews : customerViews;
   if (!views[view]) view = currentRole === "admin" ? "admin-dashboard" : currentRole === "manager" ? "dashboard" : "customer-home";
   app.innerHTML = views[view](); app.classList.remove("page-enter"); void app.offsetWidth; app.classList.add("page-enter"); document.querySelector("#pageCrumb").textContent = titles[view];
   document.querySelectorAll(".nav-item").forEach(n => n.classList.toggle("active", n.dataset.view === view));
   document.querySelector("#sidebar").classList.remove("open"); window.scrollTo({ top: 0, behavior: "smooth" });
-  document.querySelectorAll("[data-view]").forEach(el => el.addEventListener("click", () => render(el.dataset.view)));
-  document.querySelectorAll(".action-toast").forEach(el => el.addEventListener("click", () => notify()));
+  document.querySelectorAll("[data-view]").forEach(el => { el.onclick = () => render(el.dataset.view); });
+  document.querySelectorAll(".action-toast").forEach(el => { el.onclick = () => notify(); });
   document.querySelector("#addCustomer")?.addEventListener("click", () => notify("Đã mở luồng thêm khách hàng tại quầy"));
   document.querySelector("#customerSearch")?.addEventListener("input", e => { const q = e.target.value.toLowerCase(); const filtered = customers.filter(c => `${c.name} ${c.code} ${c.preference}`.toLowerCase().includes(q)); document.querySelector("#customerResults").innerHTML = customerTable(filtered); });
-  document.querySelectorAll("#startSurvey").forEach(el => el.addEventListener("click", () => render("take-survey")));
-  document.querySelector("#nextQuestion")?.addEventListener("click", () => notify("Đã lưu câu trả lời · Chuyển sang câu 2/5"));
-  document.querySelector("#profileForm")?.addEventListener("submit", e => { e.preventDefault(); notify("Đã cập nhật hồ sơ thành công"); });
-  document.querySelector("#feedbackForm")?.addEventListener("submit", e => { e.preventDefault(); notify("Cảm ơn bạn! Phản hồi đã được gửi"); e.target.reset(); });
-  document.querySelectorAll(".star-picker button").forEach((el, index, all) => el.addEventListener("click", () => all.forEach((star, i) => star.classList.toggle("picked", i <= index))));
+  document.querySelectorAll("#startSurvey").forEach(el => el.addEventListener("click", () => render("my-surveys")));
+  setupCustomerPage(view);
 }
 
 function applyRole(role) {
   currentRole = role;
   document.body.dataset.role = role;
-  document.querySelector("#mainNav").innerHTML = navs[role];
+  const guestNav = `<p class="nav-label">Tài khoản khách hàng</p><button class="nav-item" data-view="login"><span class="icon">→</span>Đăng nhập</button><button class="nav-item" data-view="register"><span class="icon">＋</span>Đăng ký thành viên</button>`;
+  document.querySelector("#mainNav").innerHTML = role === "customer" && !customerApi.hasToken() ? guestNav : navs[role];
   const customer = role === "customer"; const admin = role === "admin";
-  document.querySelector("#userInitials").textContent = customer ? "NL" : admin ? "AD" : "NQ";
-  document.querySelector("#userName").textContent = customer ? "Nguyễn Minh Long" : admin ? "System Admin" : "Nguyễn Quản Lý";
-  document.querySelector("#userRole").textContent = customer ? "Khách hàng · Green" : admin ? "Quản trị viên" : "Quản lý hệ thống";
+  document.querySelector("#userInitials").textContent = customer ? (customerApi.hasToken() ? "KH" : "?") : admin ? "AD" : "NQ";
+  document.querySelector("#userName").textContent = customer ? (customerApi.hasToken() ? "Đang tải hồ sơ" : "Khách ghé thăm") : admin ? "System Admin" : "Nguyễn Quản Lý";
+  document.querySelector("#userRole").textContent = customer ? (customerApi.hasToken() ? "Khách hàng" : "Chưa đăng nhập") : admin ? "Quản trị viên" : "Quản lý hệ thống";
   document.querySelector("#sidebarCard").innerHTML = customer ? `<span>✦</span><strong>Khảo sát mới</strong><p>Một khảo sát đang chờ ý kiến của bạn.</p><button data-view="my-surveys">Thực hiện ngay →</button>` : admin ? `<span>✦</span><strong>Hệ thống ổn định</strong><p>Tất cả dịch vụ đang hoạt động bình thường.</p><button data-view="settings">Xem trạng thái →</button>` : `<span>✦</span><strong>Gợi ý hôm nay</strong><p>8 phản hồi mới đang chờ đội ngũ chăm sóc.</p><button data-view="feedback">Xem phản hồi →</button>`;
   document.querySelector("#globalSearch").placeholder = customer ? "Tìm trợ giúp..." : admin ? "Tìm tài khoản..." : "Tìm khách hàng...";
   document.querySelector("#roleSelect").value = role;
-  render(customer ? "customer-home" : admin ? "admin-dashboard" : "dashboard");
+  const footerButton = document.querySelector(".sidebar-footer button");
+  footerButton.setAttribute("aria-label", customer && customerApi.hasToken() ? "Đăng xuất" : "Tùy chọn");
+  footerButton.onclick = customer && customerApi.hasToken() ? () => { customerApi.logout(); customerSession.profile = null; notify("Đã đăng xuất"); applyRole("customer"); } : null;
+  render(customer ? (customerApi.hasToken() ? "customer-home" : "login") : admin ? "admin-dashboard" : "dashboard");
 }
 
 document.querySelector("#menuButton").addEventListener("click", () => document.querySelector("#sidebar").classList.toggle("open"));
