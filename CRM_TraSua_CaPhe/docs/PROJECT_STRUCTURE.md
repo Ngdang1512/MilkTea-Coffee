@@ -34,7 +34,7 @@ milktea-coffee/
 - `customer`: đăng ký/đăng nhập, hồ sơ, gửi phản hồi, nhận và nộp khảo sát.
 - `staff`: tìm/thêm khách tại quầy và tiếp nhận phản hồi.
 - `manager`: kế thừa staff; khóa/xóa khách, soạn/phát hành/đóng khảo sát, xem báo cáo.
-- `admin`: khu vực riêng; kế thừa manager và quản lý tài khoản nội bộ, chi nhánh, sở thích, đồ uống.
+- `admin`: khu vực riêng; kế thừa manager và quản lý tài khoản nội bộ, sở thích, đồ uống.
 
 Mọi ID người thao tác và khách hàng phải lấy từ phiên ở backend. Ẩn nút trên UI chỉ hỗ trợ trải nghiệm, không thay thế kiểm tra quyền trên từng endpoint.
 

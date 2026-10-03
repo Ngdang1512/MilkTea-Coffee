@@ -22,7 +22,10 @@ BEGIN
   PERFORM pg_temp.assert_true(v_co_loi,p_ten);
 END $$;
 
-SELECT pg_temp.assert_true((SELECT count(*)=11 FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'),'Đủ 11 bảng');
+SELECT pg_temp.assert_true((
+  SELECT count(*) = 10 + (to_regclass('public.thong_bao') IS NOT NULL)::int
+  FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE'
+),'Đủ bảng CRM và thông báo nếu đã bật');
 SELECT pg_temp.assert_true((SELECT count(*)=8 FROM khach_hang),'Đủ 8 khách hàng demo');
 SELECT pg_temp.assert_true((SELECT count(*)=12 FROM cau_tra_loi),'Đủ 12 câu trả lời demo');
 SELECT pg_temp.assert_true((SELECT array_agg(so_khach_hang ORDER BY thu_tu)=ARRAY[1,3,3,1]::bigint[] FROM v_bao_cao_do_tuoi),'Phân nhóm tuổi đúng ranh giới 18,24,35');
