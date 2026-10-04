@@ -3,9 +3,6 @@
 -- Hash bcrypt cost 12, tương thích password_verify() của backend PHP.
 BEGIN;
 SET TIME ZONE 'Asia/Ho_Chi_Minh';
-INSERT INTO chi_nhanh(id,ma_chi_nhanh,ten_chi_nhanh,dia_chi) VALUES
-(1,'CN01','Mộc Trà – Trung tâm','Địa chỉ demo số 1'),
-(2,'CN02','Mộc Trà – Khu đại học','Địa chỉ demo số 2');
 INSERT INTO nhom_so_thich(id,ten_nhom,mo_ta) VALUES
 (1,'Trà sữa truyền thống','Thích vị trà sữa và topping'),
 (2,'Cà phê muối','Thích cà phê kết hợp kem muối'),
@@ -39,15 +36,15 @@ INSERT INTO do_uong(id,ma_do_uong,ten_do_uong,mo_ta,dang_kinh_doanh) VALUES
 (4,'CB01','Cold Brew cam sả','Sản phẩm thử nghiệm',true),
 (5,'HL01','Trà sen ít đường','Lựa chọn ít ngọt',true),
 (6,'TS02','Trà sữa khoai môn','Đã ngừng kinh doanh, vẫn giữ lịch sử',false);
-INSERT INTO phan_hoi(id,khach_hang_id,do_uong_id,chi_nhanh_id,so_sao,noi_dung,ngay_gui) VALUES
-(1,4,1,1,4,'Trân châu mềm, trà hơi ngọt.',now()-interval '7 days'),
-(2,5,1,2,5,'Mùi trà thơm, nhân viên tư vấn tốt.',now()-interval '6 days'),
-(3,6,2,1,4,'Kem muối ngon, muốn vị cà phê đậm hơn.',now()-interval '5 days'),
-(4,7,3,2,5,'Vị trái cây tươi, ít đá sẽ ngon hơn.',now()-interval '4 days'),
-(5,8,5,1,5,'Mức đường phù hợp với sở thích.',now()-interval '3 days'),
-(6,9,2,NULL,3,'Lớp kem hơi mặn so với khẩu vị.',now()-interval '2 days'),
-(7,10,4,2,4,'Hương cam rõ, hậu vị cà phê dễ uống.',now()-interval '1 day'),
-(8,11,6,1,2,'Lần trước đồ uống còn khá ngọt.',now()-interval '10 days');
+INSERT INTO phan_hoi(id,khach_hang_id,do_uong_id,so_sao,noi_dung,ngay_gui) VALUES
+(1,4,1,4,'Trân châu mềm, trà hơi ngọt.',now()-interval '7 days'),
+(2,5,1,5,'Mùi trà thơm, nhân viên tư vấn tốt.',now()-interval '6 days'),
+(3,6,2,4,'Kem muối ngon, muốn vị cà phê đậm hơn.',now()-interval '5 days'),
+(4,7,3,5,'Vị trái cây tươi, ít đá sẽ ngon hơn.',now()-interval '4 days'),
+(5,8,5,5,'Mức đường phù hợp với sở thích.',now()-interval '3 days'),
+(6,9,2,3,'Lớp kem hơi mặn so với khẩu vị.',now()-interval '2 days'),
+(7,10,4,4,'Hương cam rõ, hậu vị cà phê dễ uống.',now()-interval '1 day'),
+(8,11,6,2,'Lần trước đồ uống còn khá ngọt.',now()-interval '10 days');
 SELECT crm_xu_ly_phan_hoi(3,1,'da_xem');
 SELECT crm_xu_ly_phan_hoi(2,3,'da_tiep_thu');
 SELECT crm_xu_ly_phan_hoi(2,8,'da_tiep_thu');
@@ -83,7 +80,6 @@ SELECT crm_nop_khao_sat(4,2,'[{"cau_hoi_id":3,"lua_chon_id":8},{"cau_hoi_id":4,"
 SELECT crm_nop_khao_sat(6,2,'[{"cau_hoi_id":3,"lua_chon_id":7},{"cau_hoi_id":4,"lua_chon_id":11}]');
 SELECT crm_dong_khao_sat(2,2);
 -- Đồng bộ sequence sau khi chèn ID cụ thể, tránh trùng khóa khi thêm mới.
-SELECT setval(pg_get_serial_sequence('chi_nhanh','id'),(SELECT max(id) FROM chi_nhanh),true);
 SELECT setval(pg_get_serial_sequence('nhom_so_thich','id'),(SELECT max(id) FROM nhom_so_thich),true);
 SELECT setval(pg_get_serial_sequence('tai_khoan','id'),(SELECT max(id) FROM tai_khoan),true);
 SELECT setval(pg_get_serial_sequence('do_uong','id'),(SELECT max(id) FROM do_uong),true);

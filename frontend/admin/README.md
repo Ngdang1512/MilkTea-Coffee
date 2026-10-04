@@ -1,3 +1,3 @@
 # Admin
 
-Điểm mở rộng dành riêng cho controller, guard và route của Manager/Admin. Giao diện hiện tại được render từ `views/admin/index.html`; quyền thật phải tiếp tục được kiểm tra tại API.
+Giao diện Admin tại `views/admin/index.html` dùng chung các nghiệp vụ khách hàng, phản hồi, báo cáo và khảo sát với Manager; Admin còn có thể quản lý tài khoản nội bộ và danh mục. Mọi thao tác thay đổi dữ liệu và phân quyền đều được xác thực lại tại REST API.

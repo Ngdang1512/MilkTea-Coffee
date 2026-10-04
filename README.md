@@ -19,9 +19,11 @@ npm run dev
 - Manager: `http://127.0.0.1:4174/`
 - Customer: `http://127.0.0.1:4175/`
 
-Chạy API ở terminal khác:
+Chạy API trên Windows ở terminal PowerShell khác:
 
-```sh
+```powershell
 cd api
 /Applications/XAMPP/xamppfiles/bin/php -S 127.0.0.1:3000 -t public public/index.php
 ```
+
+Đảm bảo PostgreSQL đang chạy và có database `crm_tra_sua_ca_phe`. Nếu tài khoản PostgreSQL chưa có mật khẩu, đặt mật khẩu cho tài khoản đó trước rồi nhập cùng giá trị vào `DB_PASSWORD`.

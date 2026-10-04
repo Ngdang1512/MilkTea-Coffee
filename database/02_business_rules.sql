@@ -71,8 +71,8 @@ BEGIN
   IF TG_OP = 'INSERT' THEN
     PERFORM crm_kiem_tra_quyen(NEW.khach_hang_id, ARRAY['customer']::vai_tro[]);
   ELSE
-    IF ROW(NEW.khach_hang_id,NEW.do_uong_id,NEW.chi_nhanh_id,NEW.so_sao,NEW.noi_dung,NEW.ngay_gui)
-       IS DISTINCT FROM ROW(OLD.khach_hang_id,OLD.do_uong_id,OLD.chi_nhanh_id,OLD.so_sao,OLD.noi_dung,OLD.ngay_gui) THEN
+    IF ROW(NEW.khach_hang_id,NEW.do_uong_id,NEW.so_sao,NEW.noi_dung,NEW.ngay_gui)
+       IS DISTINCT FROM ROW(OLD.khach_hang_id,OLD.do_uong_id,OLD.so_sao,OLD.noi_dung,OLD.ngay_gui) THEN
       RAISE EXCEPTION 'Không sửa nội dung phản hồi đã gửi';
     END IF;
   END IF;
@@ -89,9 +89,9 @@ BEGIN
   IF TG_OP = 'INSERT' THEN
     IF NEW.trang_thai <> 'nhap' THEN RAISE EXCEPTION 'Khảo sát mới phải ở trạng thái nháp'; END IF;
   ELSE
-    IF OLD.trang_thai <> 'nhap' AND ROW(NEW.id,NEW.tieu_de,NEW.mo_ta,NEW.nguoi_tao_id,NEW.ngay_phat_hanh,NEW.ngay_ket_thuc)
-       IS DISTINCT FROM ROW(OLD.id,OLD.tieu_de,OLD.mo_ta,OLD.nguoi_tao_id,OLD.ngay_phat_hanh,OLD.ngay_ket_thuc) THEN
-      RAISE EXCEPTION 'Nội dung và thời hạn đã cố định sau phát hành';
+    IF OLD.trang_thai <> 'nhap' AND ROW(NEW.id,NEW.nguoi_tao_id,NEW.ngay_phat_hanh)
+       IS DISTINCT FROM ROW(OLD.id,OLD.nguoi_tao_id,OLD.ngay_phat_hanh) THEN
+      RAISE EXCEPTION 'Không thể thay đổi thông tin định danh hoặc ngày phát hành';
     END IF;
     IF NEW.trang_thai <> OLD.trang_thai AND NOT (
       (OLD.trang_thai = 'nhap' AND NEW.trang_thai = 'dang_mo') OR
@@ -126,7 +126,10 @@ BEGIN
   END IF;
   IF TG_OP = 'DELETE' THEN v_id := OLD.khao_sat_id; ELSE v_id := NEW.khao_sat_id; END IF;
   SELECT trang_thai INTO v_trang_thai FROM khao_sat WHERE id = v_id FOR UPDATE;
-  IF v_trang_thai <> 'nhap' THEN RAISE EXCEPTION 'Chỉ sửa câu hỏi khi khảo sát còn nháp'; END IF;
+  IF v_trang_thai <> 'nhap' AND EXISTS (
+    SELECT 1 FROM phan_phoi_khao_sat
+     WHERE khao_sat_id = v_id AND ngay_hoan_thanh IS NOT NULL
+  ) THEN RAISE EXCEPTION 'Không thể sửa câu hỏi sau khi đã có phản hồi hoàn thành'; END IF;
   IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
   RETURN NEW;
 END $$;
@@ -142,7 +145,10 @@ BEGIN
   IF TG_OP = 'DELETE' THEN v_cau_hoi := OLD.cau_hoi_id; ELSE v_cau_hoi := NEW.cau_hoi_id; END IF;
   SELECT k.trang_thai INTO v_trang_thai FROM khao_sat k
     JOIN cau_hoi c ON c.khao_sat_id = k.id WHERE c.id = v_cau_hoi FOR UPDATE OF k;
-  IF v_trang_thai <> 'nhap' THEN RAISE EXCEPTION 'Chỉ sửa lựa chọn khi khảo sát còn nháp'; END IF;
+  IF v_trang_thai <> 'nhap' AND EXISTS (
+    SELECT 1 FROM cau_hoi c JOIN phan_phoi_khao_sat p ON p.khao_sat_id = c.khao_sat_id
+     WHERE c.id = v_cau_hoi AND p.ngay_hoan_thanh IS NOT NULL
+  ) THEN RAISE EXCEPTION 'Không thể sửa lựa chọn sau khi đã có phản hồi hoàn thành'; END IF;
   IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
   RETURN NEW;
 END $$;
@@ -185,7 +191,7 @@ BEGIN
   PERFORM crm_kiem_tra_quyen(p_khach_hang, ARRAY['customer']::vai_tro[]);
   SELECT * INTO v_ks FROM khao_sat WHERE id = p_khao_sat FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Khảo sát không tồn tại'; END IF;
-  IF v_ks.trang_thai <> 'dang_mo' OR (v_ks.ngay_ket_thuc IS NOT NULL AND v_ks.ngay_ket_thuc <= clock_timestamp()) THEN
+  IF v_ks.da_an OR v_ks.trang_thai <> 'dang_mo' OR (v_ks.ngay_ket_thuc IS NOT NULL AND v_ks.ngay_ket_thuc <= clock_timestamp()) THEN
     RAISE EXCEPTION 'Khảo sát đã đóng hoặc hết hạn';
   END IF;
   SELECT ngay_hoan_thanh INTO v_da_nop FROM phan_phoi_khao_sat
@@ -280,7 +286,7 @@ BEGIN
   IF TG_OP='INSERT' OR (NEW.ngay_hoan_thanh IS NOT NULL AND OLD.ngay_hoan_thanh IS NULL) THEN
     PERFORM crm_kiem_tra_quyen(NEW.khach_hang_id,ARRAY['customer']::vai_tro[]);
     SELECT * INTO v_ks FROM khao_sat WHERE id=NEW.khao_sat_id FOR UPDATE;
-    IF v_ks.trang_thai <> 'dang_mo' OR (v_ks.ngay_ket_thuc IS NOT NULL AND v_ks.ngay_ket_thuc<=clock_timestamp()) THEN
+    IF v_ks.da_an OR v_ks.trang_thai <> 'dang_mo' OR (v_ks.ngay_ket_thuc IS NOT NULL AND v_ks.ngay_ket_thuc<=clock_timestamp()) THEN
       RAISE EXCEPTION 'Khảo sát không còn mở';
     END IF;
   END IF;

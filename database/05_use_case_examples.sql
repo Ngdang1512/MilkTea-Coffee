@@ -24,10 +24,9 @@ WHERE c.khao_sat_id = 1
 ORDER BY c.thu_tu,l.thu_tu;
 
 -- 4. Danh sách phản hồi mới nhất cho nhân viên/quản lý.
-SELECT p.id,h.ho_ten,d.ten_do_uong,b.ten_chi_nhanh,p.so_sao,p.noi_dung,p.trang_thai,p.ngay_gui
+SELECT p.id,h.ho_ten,d.ten_do_uong,p.so_sao,p.noi_dung,p.trang_thai,p.ngay_gui
 FROM phan_hoi p JOIN khach_hang h ON h.tai_khoan_id = p.khach_hang_id
 JOIN do_uong d ON d.id = p.do_uong_id
-LEFT JOIN chi_nhanh b ON b.id = p.chi_nhanh_id
 ORDER BY p.ngay_gui DESC,p.id DESC;
 
 -- 5. Tìm kiếm nâng cao khách: tên, trạng thái, tuổi, nhóm sở thích.
@@ -54,8 +53,8 @@ UPDATE khach_hang SET ho_ten='Lê Gia Hân',nam_sinh=2000,so_thich_id=4
 WHERE tai_khoan_id=8;
 
 -- C. Gửi phản hồi; backend chỉ cho tài khoản đã xác thực thao tác.
-INSERT INTO phan_hoi(khach_hang_id,do_uong_id,chi_nhanh_id,so_sao,noi_dung)
-VALUES (8,1,1,5,'Trân châu mềm, mức ngọt vừa phải.');
+INSERT INTO phan_hoi(khach_hang_id,do_uong_id,so_sao,noi_dung)
+VALUES (8,1,5,'Trân châu mềm, mức ngọt vừa phải.');
 
 -- D. Tiếp nhận phản hồi.
 SELECT crm_xu_ly_phan_hoi(2,1,'da_tiep_thu');
