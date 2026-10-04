@@ -71,6 +71,7 @@ final class CustomerController
         return [
             'preferences' => $this->db->query('SELECT id, ten_nhom AS "tenNhom" FROM nhom_so_thich WHERE dang_su_dung ORDER BY ten_nhom')->fetchAll(),
             'drinks' => $this->db->query('SELECT id, ma_do_uong AS "maDoUong", ten_do_uong AS "tenDoUong" FROM do_uong WHERE dang_kinh_doanh ORDER BY ten_do_uong')->fetchAll(),
+            'branches' => $this->db->query('SELECT id, ma_chi_nhanh AS "maChiNhanh", ten_chi_nhanh AS "tenChiNhanh" FROM chi_nhanh WHERE dang_hoat_dong ORDER BY ten_chi_nhanh')->fetchAll(),
         ];
     }
 
@@ -196,10 +197,10 @@ final class CustomerController
     private function feedbackHistory(int $customerId): array
     {
         $statement = $this->db->prepare(<<<'SQL'
-            SELECT p.id,d.ten_do_uong AS "tenDoUong",p.so_sao AS "soSao",
+            SELECT p.id,d.ten_do_uong AS "tenDoUong",b.ten_chi_nhanh AS "tenChiNhanh",p.so_sao AS "soSao",
                    p.noi_dung AS "noiDung",p.trang_thai AS "trangThai",p.ngay_gui AS "ngayGui",
                    p.phan_hoi_cua_nhan_vien AS "phanHoiCuaNhanVien",p.ngay_phan_hoi AS "ngayPhanHoi"
-              FROM phan_hoi p JOIN do_uong d ON d.id=p.do_uong_id
+              FROM phan_hoi p JOIN do_uong d ON d.id=p.do_uong_id LEFT JOIN chi_nhanh b ON b.id=p.chi_nhanh_id
              WHERE p.khach_hang_id=:id ORDER BY p.ngay_gui DESC,p.id DESC
         SQL);
         $statement->execute(['id' => $customerId]);
@@ -214,6 +215,8 @@ final class CustomerController
         Http::require($drink !== false && $drink > 0, 'Vui lòng chọn đồ uống');
         Http::require($rating !== false && $rating >= 1 && $rating <= 5, 'Số sao phải từ 1 đến 5');
         Http::require(mb_strlen($content) >= 10, 'Nội dung phản hồi phải có ít nhất 10 ký tự');
+        $branch = empty($body['chiNhanhId']) ? null : (int) $body['chiNhanhId'];
+
         $this->db->beginTransaction();
         try {
             $lock = $this->db->prepare('SELECT pg_advisory_xact_lock(:customer)');
@@ -221,12 +224,13 @@ final class CustomerController
             $duplicate = $this->db->prepare(<<<'SQL'
                 SELECT 1 FROM phan_hoi
                  WHERE khach_hang_id=:customer AND do_uong_id=:drink
+                   AND chi_nhanh_id IS NOT DISTINCT FROM :branch
                    AND so_sao=:rating AND noi_dung=:content
                    AND ngay_gui >= clock_timestamp() - interval '5 seconds'
                  LIMIT 1
             SQL);
             $duplicate->execute([
-                'customer' => $customerId, 'drink' => $drink,
+                'customer' => $customerId, 'drink' => $drink, 'branch' => $branch,
                 'rating' => $rating, 'content' => $content,
             ]);
             if ($duplicate->fetchColumn()) {
@@ -234,12 +238,12 @@ final class CustomerController
             }
 
             $statement = $this->db->prepare(<<<'SQL'
-                INSERT INTO phan_hoi(khach_hang_id,do_uong_id,so_sao,noi_dung)
-                VALUES (:customer,:drink,:rating,:content)
+                INSERT INTO phan_hoi(khach_hang_id,do_uong_id,chi_nhanh_id,so_sao,noi_dung)
+                VALUES (:customer,:drink,:branch,:rating,:content)
                 RETURNING id,trang_thai AS "trangThai",ngay_gui AS "ngayGui"
             SQL);
             $statement->execute([
-                'customer' => $customerId, 'drink' => $drink,
+                'customer' => $customerId, 'drink' => $drink, 'branch' => $branch,
                 'rating' => $rating, 'content' => $content,
             ]);
             $feedback = $statement->fetch();
@@ -258,7 +262,7 @@ final class CustomerController
                    k.ngay_ket_thuc AS "ngayKetThuc",p.ngay_gui AS "ngayGui",p.ngay_hoan_thanh AS "ngayHoanThanh",
                    count(c.id)::int AS "soCauHoi"
               FROM phan_phoi_khao_sat p JOIN khao_sat k ON k.id=p.khao_sat_id LEFT JOIN cau_hoi c ON c.khao_sat_id=k.id
-             WHERE p.khach_hang_id=:id AND NOT k.da_an GROUP BY k.id,p.ngay_gui,p.ngay_hoan_thanh ORDER BY p.ngay_gui DESC
+             WHERE p.khach_hang_id=:id GROUP BY k.id,p.ngay_gui,p.ngay_hoan_thanh ORDER BY p.ngay_gui DESC
         SQL);
         $statement->execute(['id' => $customerId]);
         return $statement->fetchAll();
@@ -274,7 +278,7 @@ final class CustomerController
                      'luaChon',(SELECT json_agg(json_build_object('id',l.id,'noiDung',l.noi_dung,'thuTu',l.thu_tu) ORDER BY l.thu_tu) FROM lua_chon l WHERE l.cau_hoi_id=c.id)
                    ) ORDER BY c.thu_tu) FILTER (WHERE c.id IS NOT NULL),'[]') AS questions
               FROM phan_phoi_khao_sat p JOIN khao_sat k ON k.id=p.khao_sat_id LEFT JOIN cau_hoi c ON c.khao_sat_id=k.id
-             WHERE p.khach_hang_id=:customer AND k.id=:survey AND NOT k.da_an GROUP BY k.id,p.ngay_hoan_thanh
+             WHERE p.khach_hang_id=:customer AND k.id=:survey GROUP BY k.id,p.ngay_hoan_thanh
         SQL);
         $statement->execute(['customer' => $customerId, 'survey' => $surveyId]);
         $survey = $statement->fetch();

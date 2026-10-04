@@ -38,7 +38,7 @@ psql -U postgres -d crm_tra_sua_ca_phe -v ON_ERROR_STOP=1 -f 06_verify.sql
 | khach01 đến khach07 | customer | active |
 | khach08 | customer | locked |
 
-Mật khẩu tất cả tài khoản demo: `DemoCRM@2026`. Mỗi hash có salt riêng. Định dạng: `scrypt$N$r$p$salt_base64$derived_key_base64`, với N=131072, r=8, p=1 và derived key 32 byte. Hash do backend xác minh; DB không so sánh trực tiếp mật khẩu gốc.
+Mật khẩu tất cả tài khoản demo: `DemoCRM@2026`. Mỗi tài khoản có hash bcrypt cost 12 và salt riêng, tương thích `password_verify()` của backend PHP. DB không so sánh trực tiếp mật khẩu gốc.
 
 Tham khảo: `python verify_demo_password.py khach01` rồi nhập mật khẩu. Đây chỉ là kiểm tra hash trong dữ liệu demo; đăng nhập thực tế còn kiểm tra trạng thái và phiên.
 
@@ -53,9 +53,9 @@ Tham khảo: `python verify_demo_password.py khach01` rồi nhập mật khẩu.
 - Khi không có mẫu số, tỷ lệ là NULL để UI hiển thị “Chưa có dữ liệu”.
 - Có 3 FK ghép trong câu trả lời. khao_sat_id lặp có chủ đích để DB kiểm tra đúng quan hệ; không tuyên bố mô hình vật lý đạt 3NF tuyệt đối.
 
-## Triển khai ứng dụng tiếp theo
+## Trạng thái triển khai ứng dụng
 
-Các file này hoàn thành phần phân tích thiết kế và CSDL. **Chưa có ứng dụng Web/API đã triển khai**. Các lớp service, hợp đồng API và màn hình trong báo cáo là thiết kế cho nhóm lập trình.
+Phần phân tích thiết kế và CSDL đã hoàn thành. Prototype Web nằm tại `../frontend`; Customer API PHP/PDO PostgreSQL nằm tại `../api`. Các chức năng Admin và Manager trong báo cáo vẫn là phạm vi triển khai tiếp theo của nhóm.
 
 ### Prototype giao diện
 

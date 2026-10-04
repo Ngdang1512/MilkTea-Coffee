@@ -1,6 +1,6 @@
 -- DỮ LIỆU GIẢ LẬP. Chạy một lần trên schema mới, sau 01 và 02.
 -- Tất cả tài khoản demo dùng mật khẩu: DemoCRM@2026
--- Chuỗi hash scrypt: scrypt$N$r$p$salt_base64$derived_key_base64.
+-- Hash bcrypt cost 12, tương thích password_verify() của backend PHP.
 BEGIN;
 SET TIME ZONE 'Asia/Ho_Chi_Minh';
 INSERT INTO nhom_so_thich(id,ten_nhom,mo_ta) VALUES
@@ -8,18 +8,18 @@ INSERT INTO nhom_so_thich(id,ten_nhom,mo_ta) VALUES
 (2,'Cà phê muối','Thích cà phê kết hợp kem muối'),
 (3,'Trà trái cây nhiệt đới','Thích trà kết hợp trái cây'),
 (4,'Đồ uống ít ngọt/Healthy','Ưu tiên ít đường');
-INSERT INTO tai_khoan(id,ten_dang_nhap,mat_khau_hash,vai_tro,nguoi_tao_id) VALUES
-(1,'admin','$2y$12$VsyfPgYPc4XVV.H4/m1r1Oyuimvnci4FrLQsugd5cy6.Db.mTca0a','admin',NULL),
-(2,'quanly','$2y$12$P0y6NM.TRst4vabfMLlrwe4mIVFAQusAaeaF33rr6ioHZaxjBcX2S','manager',1),
-(3,'nhanvien','$2y$12$EH65izSCtPB14S76rzQFDeEZICk4yU3zKloXjySWEgj6Yvhj/6k1O','staff',1),
-(4,'khach01','$2y$12$sKDwdi6bXt.SSX3SaRJAVeRdUNqoYN8XrEnnDeTGvP0QnJMnheB.G','customer',3),
-(5,'khach02','$2y$12$fi8oVXK5lAAtSdSsCHSYq.Z0CkrilSJbEaAwl72xGHIkPzAWwXTx6','customer',3),
-(6,'khach03','$2y$12$zkWRL8l4BbKmbtoX/nr.suPrBcfpWePnMqEwxwNguawix9MI95Oza','customer',NULL),
-(7,'khach04','$2y$12$/Z0aYQpAL965cZSKg01foumSsWtwb2Q6ctoOs33x6360ycSOPKt6y','customer',NULL),
-(8,'khach05','$2y$12$QCDOVO/Hfqy8s8EAcpKW8OxWbNgWGRPIQE0UcQKfZ72q.mkYTUrty','customer',NULL),
-(9,'khach06','$2y$12$fpvhdrqFyM1WkdBa05tkve/VVj0cWSVPdzWRRGe40SD15cUETBBRm','customer',NULL),
-(10,'khach07','$2y$12$iSpWzWh9Rpb/eFRvDnVlEeQl/A5UW8WqHrhnlmXF8ThKQyY.8hW82','customer',NULL),
-(11,'khach08','$2y$12$aa.S53EU1ClFG5oXTbAxauLVRWJbH8SYXGyGsxR2KXzp2dlF2k70S','customer',NULL);
+INSERT INTO tai_khoan(id,ten_dang_nhap,mat_khau_hash,vai_tro,chi_nhanh_id,nguoi_tao_id) VALUES
+(1,'admin','$2y$12$VsyfPgYPc4XVV.H4/m1r1Oyuimvnci4FrLQsugd5cy6.Db.mTca0a','admin',NULL,NULL),
+(2,'quanly','$2y$12$P0y6NM.TRst4vabfMLlrwe4mIVFAQusAaeaF33rr6ioHZaxjBcX2S','manager',1,1),
+(3,'nhanvien','$2y$12$EH65izSCtPB14S76rzQFDeEZICk4yU3zKloXjySWEgj6Yvhj/6k1O','staff',1,1),
+(4,'khach01','$2y$12$sKDwdi6bXt.SSX3SaRJAVeRdUNqoYN8XrEnnDeTGvP0QnJMnheB.G','customer',NULL,3),
+(5,'khach02','$2y$12$fi8oVXK5lAAtSdSsCHSYq.Z0CkrilSJbEaAwl72xGHIkPzAWwXTx6','customer',NULL,3),
+(6,'khach03','$2y$12$zkWRL8l4BbKmbtoX/nr.suPrBcfpWePnMqEwxwNguawix9MI95Oza','customer',NULL,NULL),
+(7,'khach04','$2y$12$/Z0aYQpAL965cZSKg01foumSsWtwb2Q6ctoOs33x6360ycSOPKt6y','customer',NULL,NULL),
+(8,'khach05','$2y$12$QCDOVO/Hfqy8s8EAcpKW8OxWbNgWGRPIQE0UcQKfZ72q.mkYTUrty','customer',NULL,NULL),
+(9,'khach06','$2y$12$fpvhdrqFyM1WkdBa05tkve/VVj0cWSVPdzWRRGe40SD15cUETBBRm','customer',NULL,NULL),
+(10,'khach07','$2y$12$iSpWzWh9Rpb/eFRvDnVlEeQl/A5UW8WqHrhnlmXF8ThKQyY.8hW82','customer',NULL,NULL),
+(11,'khach08','$2y$12$aa.S53EU1ClFG5oXTbAxauLVRWJbH8SYXGyGsxR2KXzp2dlF2k70S','customer',NULL,NULL);
 INSERT INTO khach_hang(tai_khoan_id,ma_thanh_vien,ho_ten,nam_sinh,gioi_tinh,so_thich_id) VALUES
 (4,'TV0004','Nguyễn Minh An',extract(year FROM current_date)::int-17,'nam',1),
 (5,'TV0005','Trần Bảo Ngọc',extract(year FROM current_date)::int-20,'nu',1),

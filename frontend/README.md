@@ -31,4 +31,4 @@ Mỗi cổng dùng đường dẫn và phiên đăng nhập riêng, vì vậy c�
 
 Khu Customer gọi REST API tại `http://localhost:3000`. Cần khởi động `api/` và PostgreSQL trước khi đăng ký, đăng nhập, cập nhật hồ sơ, gửi phản hồi hoặc làm khảo sát.
 
-Khu Admin/Manager cũng gọi API này và yêu cầu đăng nhập nội bộ. Dữ liệu dashboard, khách hàng, phản hồi, khảo sát, tài khoản và danh mục được đọc trực tiếp từ PostgreSQL. Tài khoản demo: `admin` hoặc `quanly`, mật khẩu `DemoCRM@2026`.
+Khu Admin/Manager cũng gọi API này và yêu cầu đăng nhập nội bộ. Dữ liệu dashboard, khách hàng, phản hồi, khảo sát, tài khoản, chi nhánh và danh mục được đọc trực tiếp từ PostgreSQL. Tài khoản demo: `admin` hoặc `quanly`, mật khẩu `DemoCRM@2026`.

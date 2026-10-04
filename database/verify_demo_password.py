@@ -1,29 +1,23 @@
-"""Xác minh hash tài khoản DEMO bằng Python 3, không cần thư viện ngoài."""
-import base64
+"""Xác minh bcrypt tài khoản demo qua tiện ích htpasswd của hệ điều hành."""
 import getpass
-import hashlib
-import hmac
 import re
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 
 def verify_password(password: str, encoded: str) -> bool:
-    try:
-        algorithm, n, r, p, salt, expected = encoded.split('$')
-        if algorithm != 'scrypt':
-            return False
-        # File demo do hệ thống tạo; chỉ chấp nhận đúng cấu hình demo.
-        if (int(n), int(r), int(p)) != (131072, 8, 1):
-            return False
-        salt_bytes = base64.b64decode(salt, validate=True)
-        expected_bytes = base64.b64decode(expected, validate=True)
-        actual = hashlib.scrypt(password.encode('utf-8'), salt=salt_bytes,
-                                n=131072, r=8, p=1, dklen=len(expected_bytes),
-                                maxmem=256 * 1024 * 1024)
-        return hmac.compare_digest(actual, expected_bytes)
-    except (ValueError, TypeError):
+    if not encoded.startswith(('$2y$', '$2b$', '$2a$')):
         return False
+    with tempfile.NamedTemporaryFile('w', encoding='utf-8') as password_file:
+        password_file.write(f'demo:{encoded}\n')
+        password_file.flush()
+        result = subprocess.run(
+            ['htpasswd', '-vb', password_file.name, 'demo', password],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False
+        )
+        return result.returncode == 0
 
 
 if __name__ == '__main__':

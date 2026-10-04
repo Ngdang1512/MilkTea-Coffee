@@ -9,8 +9,8 @@ Thứ tự chạy thủ công:
 3. `02_business_rules.sql`
 4. `03_demo_data.sql`
 5. `04_reports.sql`
-6. `07_notifications_and_replies.sql`
-7. `06_verify.sql`
+6. `06_verify.sql`
+7. `07_notifications_and_replies.sql`
 
 Hoặc kết nối vào database trống và chạy `CRM_Create_All.sql` một lần.
 
