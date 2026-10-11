@@ -244,7 +244,7 @@ END $$;
 CREATE FUNCTION crm_xoa_khach_hang(p_nguoi_thuc_hien bigint, p_khach_hang bigint)
 RETURNS void LANGUAGE plpgsql AS $$
 BEGIN
-  PERFORM crm_kiem_tra_quyen(p_nguoi_thuc_hien, ARRAY['admin','manager']::vai_tro[]);
+  PERFORM crm_kiem_tra_quyen(p_nguoi_thuc_hien, ARRAY['admin']::vai_tro[]);
   DELETE FROM tai_khoan WHERE id = p_khach_hang AND vai_tro = 'customer';
   IF NOT FOUND THEN RAISE EXCEPTION 'Khách hàng không tồn tại'; END IF;
   -- CASCADE: hồ sơ, phản hồi, phân phối và câu trả lời của đúng khách đó.

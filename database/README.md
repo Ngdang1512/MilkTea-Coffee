@@ -1,38 +1,36 @@
 # milktea-coffee database
 
-PostgreSQL dùng chung cho toàn hệ thống. Thư mục gồm schema, business rules, dữ liệu demo, report views, ví dụ sử dụng và script kiểm tra.
+PostgreSQL database for the CRM. `CRM_Create_All.sql` initializes a new, empty database with the schema, business rules, demo data, and report views.
 
-Thứ tự chạy thủ công:
+## New database
 
-1. `00_create_database.sql`
-2. `01_schema.sql`
-3. `02_business_rules.sql`
-4. `03_demo_data.sql`
-5. `04_reports.sql`
-6. `07_notifications_and_replies.sql`
-7. `06_verify.sql`
+1. Create database `crm_tra_sua_ca_phe` in pgAdmin.
+2. Connect to it, open **Query Tool**, and run `CRM_Create_All.sql`.
+3. Run `07_notifications_and_replies.sql` to add the notification table and feedback-reply field required by the API.
+4. Run `10_admin_governance.sql` to add Manager personnel data, approval requests, and customer audit history.
 
-Hoặc kết nối vào database trống và chạy `CRM_Create_All.sql` một lần.
+The demo accounts are `admin`, `quanly`, and `khach01`; each uses `DemoCRM@2026`.
 
-Nếu database đã được tạo trước khi bổ sung thông báo, chạy `07_notifications_and_replies.sql` một lần trước khi dùng API gửi trả lời phản hồi, phát hành khảo sát hoặc đọc thông báo. Script này có thể chạy lại an toàn.
+Do not rerun `CRM_Create_All.sql` on a database that already contains data. It is an initialization script, not an upgrade.
 
-Nếu database đã được tạo trước khi loại bỏ chi nhánh, chạy `08_remove_branches.sql` một lần để gỡ các cột và bảng cũ mà không xóa tài khoản, khách hàng hay nội dung phản hồi. Database cũ cần áp dụng cả hai script nâng cấp `07_notifications_and_replies.sql` và `08_remove_branches.sql`; chúng xử lý các thay đổi khác nhau.
+## Existing database
 
-Nếu database đã được tạo trước khi bổ sung sửa/ẩn khảo sát, chạy `09_survey_management.sql` một lần sau khi đã có các bảng và hàm khảo sát. Script thêm cờ ẩn mềm và cập nhật quy tắc để cho phép sửa câu hỏi khi chưa có phản hồi hoàn thành; các phản hồi và lịch sử phân phối hiện có được giữ nguyên. Không cần chạy script nâng cấp này trên database mới được tạo từ `CRM_Create_All.sql`.
+Apply only migrations that are not already present:
 
-## Chạy migration sửa/ẩn khảo sát trên Windows
+- `07_notifications_and_replies.sql`: adds customer notifications and staff replies; safe to run more than once.
+- `08_remove_branches.sql`: removes obsolete branch columns/tables from databases created with the earlier branch schema.
+- `09_survey_management.sql`: adds survey hiding and current survey-editing business rules.
+- `10_admin_governance.sql`: adds internal Manager personnel data, Manager customer lock/deletion requests, and customer audit/rollback records; restricts direct customer deletion to Admin and is safe to run more than once.
 
-Nếu database hiện tại chưa có bảng `thong_bao`, trước tiên chạy migration `07_notifications_and_replies.sql` để tạo bảng này. Sau đó chạy `09_survey_management.sql`. Trong PowerShell, đặt encoding UTF-8 rồi chạy lần lượt (đổi `-U` hoặc `-d` nếu tên tài khoản/database của bạn khác):
+For pgAdmin, select `crm_tra_sua_ca_phe`, open **Query Tool**, and run each required migration file in order. For PowerShell with PostgreSQL 16's `psql`:
 
 ```powershell
 $env:PGCLIENTENCODING = "UTF8"
 $psql = "C:\Program Files\PostgreSQL\16\bin\psql.exe"
 & $psql -h localhost -p 5432 -U postgres -d crm_tra_sua_ca_phe -W -v ON_ERROR_STOP=1 -f "C:\xampp\htdocs\MilkTea-Coffee\database\07_notifications_and_replies.sql"
-if ($LASTEXITCODE -ne 0) { throw "Migration 07 thất bại; chưa chạy migration 09." }
-& $psql -h localhost -p 5432 -U postgres -d crm_tra_sua_ca_phe -W -v ON_ERROR_STOP=1 -f "C:\xampp\htdocs\MilkTea-Coffee\database\09_survey_management.sql"
-if ($LASTEXITCODE -ne 0) { throw "Migration 09 thất bại." }
+if ($LASTEXITCODE -ne 0) { throw "Migration 07 thất bại." }
 ```
 
-`PGCLIENTENCODING=UTF8` giúp `psql` đọc đúng tiếng Việt trong file SQL. `-W` yêu cầu nhập mật khẩu PostgreSQL; đây không phải mật khẩu tài khoản demo của ứng dụng. Nếu PostgreSQL được cài ở vị trí khác, thay đường dẫn tới `psql.exe` bằng file trong thư mục `bin` của PostgreSQL (ví dụ `C:\Program Files\PostgreSQL\<phiên-bản>\bin\psql.exe`). Không dùng `CRM_Create_All.sql` cho database đang hoạt động vì đây là script khởi tạo database mới.
+`-W` asks for the PostgreSQL user's password, not the CRM demo-account password. Change the `psql.exe` path, user, or database name if your installation differs. Run migration 10 after migration 07 (and migrations 08/09 when required), using the same command pattern.
 
-Có thể chạy thay thế trong pgAdmin: chọn đúng database `crm_tra_sua_ca_phe`, mở **Query Tool**, mở rồi chạy `07_notifications_and_replies.sql` trước; sau đó mở và chạy `09_survey_management.sql`. Migration hoàn tất khi không có lỗi và mỗi script kết thúc bằng `COMMIT`.
+Other scripts include `00_create_database.sql`, individual schema/rule/data files `01`-`03`, reports `04`, examples `05`, and checks `06`. `CRM_Create_All.sql` already includes the current survey-management rules and report views.
