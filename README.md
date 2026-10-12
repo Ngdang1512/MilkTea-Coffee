@@ -72,3 +72,10 @@ Giữ cửa sổ này mở, sau đó truy cập:
 - Báo thiếu bảng/cột hoặc cấu trúc database: kiểm tra đã chạy `07_notifications_and_replies.sql` rồi `10_admin_governance.sql` trên đúng database chưa. Hướng dẫn chi tiết: [database/README.md](database/README.md).
 
 Chi tiết API: [api/README.md](api/README.md).
+
+Nếu tạo database mới, chạy theo thứ tự:
+CRM_Create_All.sql
+07_notifications_and_replies.sql
+10_admin_governance.sql
+
+Nếu pgAdmin báo lỗi, chạy ROLLBACK; để thoát transaction lỗi, rồi xử lý lỗi đầu tiên trong tab Messages trước khi chạy lại.
