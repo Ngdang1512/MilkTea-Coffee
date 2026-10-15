@@ -1,7 +1,7 @@
 import { APP_CONFIG } from "../configs/app-config.js";
 
 const TOKEN_KEY = "milktea-customer-token";
-const internalPortal = location.port === "4173" || location.pathname.includes("admin") ? "admin" : "manager";
+const internalPortal = location.pathname === "/admin" || location.pathname.startsWith("/admin/") ? "admin" : "manager";
 const INTERNAL_TOKEN_KEY = `milktea-${internalPortal}-token`;
 
 async function request(path, options = {}) {
@@ -83,11 +83,27 @@ export const internalApi = {
   me: () => internalRequest("/internal/me"),
   dashboard: () => internalRequest("/internal/dashboard"),
   customers: () => internalRequest("/internal/customers"),
+  createCustomer: customer => internalRequest("/internal/customers", { method: "POST", body: customer }),
+  updateCustomer: (id, customer) => internalRequest(`/internal/customers/${id}`, { method: "PATCH", body: customer }),
+  updateCustomerStatus: (id, status) => internalRequest(`/internal/customers/${id}/status`, { method: "PATCH", body: { status } }),
+  deleteCustomer: id => internalRequest(`/internal/customers/${id}`, { method: "DELETE" }),
+  managers: () => internalRequest("/internal/managers"),
+  createManager: manager => internalRequest("/internal/managers", { method: "POST", body: manager }),
+  updateManager: (id, manager) => internalRequest(`/internal/managers/${id}`, { method: "PATCH", body: manager }),
+  customerRequests: () => internalRequest("/internal/customer-requests"),
+  createCustomerRequest: request => internalRequest("/internal/customer-requests", { method: "POST", body: request }),
+  decideCustomerRequest: (id, status, note = "") => internalRequest(`/internal/customer-requests/${id}`, { method: "PATCH", body: { status, note } }),
+  customerAudit: () => internalRequest("/internal/customer-audit"),
+  rollbackCustomerAudit: id => internalRequest(`/internal/customer-audit/${id}/rollback`, { method: "POST" }),
+  customerReports: () => internalRequest("/internal/reports/customers"),
   feedback: () => internalRequest("/internal/feedback"),
   updateFeedback: (id, status, reply = "") => internalRequest(`/internal/feedback/${id}`, { method: "PATCH", body: { status, reply } }),
   surveys: () => internalRequest("/internal/surveys"),
+  survey: id => internalRequest(`/internal/surveys/${id}`),
+  surveyResults: id => internalRequest(`/internal/surveys/${id}/results`),
   createSurvey: survey => internalRequest("/internal/surveys", { method: "POST", body: survey }),
+  updateSurvey: (id, survey) => internalRequest(`/internal/surveys/${id}`, { method: "PATCH", body: survey }),
+  setSurveyVisibility: (id, hidden) => internalRequest(`/internal/surveys/${id}/visibility`, { method: "PATCH", body: { hidden } }),
   accounts: () => internalRequest("/internal/accounts"),
-  branches: () => internalRequest("/internal/branches"),
   catalogs: () => internalRequest("/internal/catalogs")
 };
