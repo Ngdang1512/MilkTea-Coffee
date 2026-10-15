@@ -18,8 +18,9 @@
   <link rel="stylesheet" href="../../templates/shared/branding.css" />
   <link rel="stylesheet" href="../../templates/shared/effects.css" />
   <link rel="stylesheet" href="../../templates/shared/hover.css" />
+  <link rel="stylesheet" href="../../templates/shared/auth.css" />
 </head>
-<body data-default-role="admin">
+<body class="auth-mode" data-default-role="admin">
   <div class="app-shell">
     <aside class="sidebar" id="sidebar">
       <div class="brand"><span class="brand-mark"><img src="../../templates/shared/assets/logo.png" alt="Logo MILKTEA - COFFEE" /></span><span><strong>milktea-coffee</strong><small>Customer care</small></span></div>
@@ -42,7 +43,7 @@
       <header class="topbar">
         <button class="mobile-menu" id="menuButton" aria-label="Mở menu">☰</button>
         <div class="breadcrumb"><span>milktea-coffee</span><b>/</b><strong id="pageCrumb">Tổng quan</strong></div>
-        <div class="top-actions"><label class="role-switch" title="Chuyển giao diện demo"><span>Vai trò</span><select id="roleSelect"><option value="admin">Admin</option><option value="manager">Manager</option><option value="customer">Customer</option></select></label><label class="global-search"><span>⌕</span><input id="globalSearch" placeholder="Tìm tài khoản..." /><kbd>⌘ K</kbd></label><button class="notification" aria-label="Thông báo">♢<i></i></button><button class="help" aria-label="Trợ giúp">?</button></div>
+        <div class="top-actions"><label class="role-switch" title="Chuyển giao diện demo"><span>Vai trò</span><select id="roleSelect"><option value="admin">Admin</option><option value="manager">Manager</option><option value="customer">Customer</option></select></label><label class="global-search"><span>⌕</span><input id="globalSearch" placeholder="Tìm tài khoản..." /><kbd>⌘ K</kbd></label><button class="notification" data-view="customer-requests" aria-label="Yêu cầu đang chờ duyệt" title="Mở Trung tâm phê duyệt">♢<i></i><span id="approvalCount" hidden>0</span></button><button class="help" aria-label="Trợ giúp">?</button></div>
       </header>
 
       <div class="page" id="app"></div>
