@@ -899,7 +899,10 @@ function switchRole(role) {
   internalSession.account = null;
   internalSession.dashboard = null;
   internalSession.loaded.clear();
-  location.assign(`${location.origin}/${role}`);
+  const portalPorts = { admin: 4173, manager: 4174, customer: 4175 };
+  const destination = new URL("/", location.origin);
+  destination.port = String(portalPorts[role]);
+  location.assign(destination);
 }
 
 async function initializeRole(role) {
