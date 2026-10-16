@@ -58,9 +58,9 @@ npm run dev
 
 Lệnh này mở đồng thời ba cổng; giữ cửa sổ này mở, sau đó truy cập:
 
-- Admin: http://127.0.0.1:4173/
-- Manager: http://127.0.0.1:4174/
-- Customer: http://127.0.0.1:4175/
+Admin đang chạy tại http://127.0.0.1:4173
+Manager đang chạy tại http://127.0.0.1:4174
+Customer đang chạy tại http://127.0.0.1:4175
 
 Đăng nhập bằng tài khoản demo ở trên. Admin mới cần migration 10; nếu chưa chạy migration, các trang quản trị mới sẽ báo thiếu cấu trúc database. Để chạy ứng dụng, cần giữ cả hai cửa sổ PowerShell (API và frontend) mở. XAMPP/Apache và MySQL không cần bật; pgAdmin chỉ dùng để quản lý PostgreSQL.
 
