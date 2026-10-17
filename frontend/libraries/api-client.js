@@ -45,13 +45,16 @@ export const customerApi = {
   },
   me: () => request("/me"),
   updateMe: profile => request("/me", { method: "PATCH", body: profile }),
+  updatePassword: passwords => request("/me/password", { method: "PATCH", body: passwords }),
   feedback: () => request("/me/feedback"),
   sendFeedback: feedback => request("/me/feedback", { method: "POST", body: feedback }),
   surveys: () => request("/me/surveys"),
   survey: id => request(`/me/surveys/${id}`),
+  surveyResults: id => request(`/me/surveys/${id}/results`),
   submitSurvey: (id, answers) => request(`/me/surveys/${id}/submit`, { method: "POST", body: { answers } }),
   notifications: () => request("/me/notifications"),
-  readNotification: id => request(`/me/notifications/${id}`, { method: "PATCH" })
+  readNotification: id => request(`/me/notifications/${id}`, { method: "PATCH" }),
+  readAllNotifications: () => request("/me/notifications/read-all", { method: "PATCH" })
 };
 
 async function internalRequest(path, options = {}) {

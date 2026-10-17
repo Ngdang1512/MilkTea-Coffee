@@ -194,6 +194,8 @@ async function customerRoutes(request, response, method, path, body) {
     return true;
   }
   if (method === "POST" && path === "/auth/register") {
+    const passwordConfirmation = requirePassword(body.matKhauXacNhan);
+    if (body.matKhau !== passwordConfirmation) throw new HttpError(400, "Mật khẩu xác nhận chưa khớp");
     const accountId = await transaction(client => createCustomerAccount(client, body));
     const profile = await getProfile(accountId);
     json(response, 201, { token: createToken({ id: accountId, role: "customer" }), profile });
@@ -221,11 +223,25 @@ async function customerRoutes(request, response, method, path, body) {
     json(response, 200, { profile: await getProfile(customer.id) });
     return true;
   }
+  if (method === "PATCH" && path === "/me/password") {
+    const customer = await requireCustomer(request);
+    const currentPassword = requirePassword(body.matKhauHienTai);
+    const newPassword = requirePassword(body.matKhauMoi);
+    if (currentPassword === newPassword) throw new HttpError(400, "Mật khẩu mới phải khác mật khẩu hiện tại");
+    const { rows } = await pool.query("SELECT mat_khau_hash FROM tai_khoan WHERE id = $1", [customer.id]);
+    if (!rows[0] || !(await verifyPassword(currentPassword, rows[0].mat_khau_hash))) {
+      throw new HttpError(400, "Mật khẩu hiện tại không đúng");
+    }
+    await pool.query("UPDATE tai_khoan SET mat_khau_hash = $2 WHERE id = $1", [customer.id, await hashPassword(newPassword)]);
+    json(response, 200, { message: "Đổi mật khẩu thành công" });
+    return true;
+  }
   if (path === "/me/feedback" && method === "GET") {
     const customer = await requireCustomer(request);
     const { rows } = await pool.query(
       `SELECT p.id, p.so_sao AS "soSao", p.noi_dung AS "noiDung", p.trang_thai AS "trangThai",
               p.phan_hoi_cua_nhan_vien AS "phanHoiCuaNhanVien", p.ngay_gui AS "ngayGui",
+              p.ngay_phan_hoi AS "ngayPhanHoi",
               d.ten_do_uong AS "tenDoUong"
          FROM phan_hoi p JOIN do_uong d ON d.id = p.do_uong_id
         WHERE p.khach_hang_id = $1 ORDER BY p.ngay_gui DESC`,
@@ -294,6 +310,31 @@ async function customerRoutes(request, response, method, path, body) {
     json(response, 200, { survey: { id: survey.id, title: survey.title, questions: [...questionMap.values()] } });
     return true;
   }
+  const completedCustomerSurvey = path.match(/^\/me\/surveys\/(\d+)\/results$/);
+  if (method === "GET" && completedCustomerSurvey) {
+    const customer = await requireCustomer(request);
+    const id = requireInteger(completedCustomerSurvey[1], "Mã khảo sát");
+    const surveyResult = await pool.query(
+      `SELECT k.id, k.tieu_de AS title, k.mo_ta AS description,
+              p.ngay_hoan_thanh AS "completedAt"
+         FROM khao_sat k JOIN phan_phoi_khao_sat p ON p.khao_sat_id = k.id
+        WHERE k.id = $1 AND p.khach_hang_id = $2 AND p.ngay_hoan_thanh IS NOT NULL`,
+      [id, customer.id]
+    );
+    if (!surveyResult.rowCount) throw new HttpError(404, "Không tìm thấy kết quả khảo sát đã hoàn thành");
+    const answers = await pool.query(
+      `SELECT c.id, c.noi_dung AS content, c.bat_buoc AS required, c.thu_tu,
+              l.id AS "choiceId", l.noi_dung AS "choiceContent"
+         FROM cau_hoi c
+         LEFT JOIN cau_tra_loi a ON a.khao_sat_id = c.khao_sat_id
+          AND a.cau_hoi_id = c.id AND a.khach_hang_id = $2
+         LEFT JOIN lua_chon l ON l.id = a.lua_chon_id
+        WHERE c.khao_sat_id = $1 ORDER BY c.thu_tu`,
+      [id, customer.id]
+    );
+    json(response, 200, { survey: { ...surveyResult.rows[0], questions: answers.rows } });
+    return true;
+  }
   const submitSurvey = path.match(/^\/me\/surveys\/(\d+)\/submit$/);
   if (method === "POST" && submitSurvey) {
     const customer = await requireCustomer(request);
@@ -316,6 +357,16 @@ async function customerRoutes(request, response, method, path, body) {
       [customer.id]
     );
     json(response, 200, { notifications: rows });
+    return true;
+  }
+  if (method === "PATCH" && path === "/me/notifications/read-all") {
+    const customer = await requireCustomer(request);
+    const result = await pool.query(
+      `UPDATE thong_bao SET da_doc = true, ngay_doc = coalesce(ngay_doc, clock_timestamp())
+        WHERE tai_khoan_id = $1 AND NOT da_doc`,
+      [customer.id]
+    );
+    json(response, 200, { updated: result.rowCount });
     return true;
   }
   const notification = path.match(/^\/me\/notifications\/(\d+)$/);
