@@ -3,7 +3,7 @@ import { APP_CONFIG } from "../configs/app-config.js";
 import { customerApi, internalApi } from "./api-client.js";
 
 const customerSession = { profile: null, options: null, currentSurvey: null, questionIndex: 0, answers: [], notifications: [] };
-const internalSession = { account: null, dashboard: null, customers: [], feedback: [], surveys: [], editSurvey: null, accounts: [], managers: [], customerRequests: [], customerAudit: [], approvalFilters: { tab: "pending", query: "", from: "", to: "", page: 1 }, catalogs: null, reports: null, surveyResults: null, loaded: new Set() };
+const internalSession = { account: null, dashboard: null, customers: [], feedback: [], surveys: [], editSurvey: null, accounts: [], managers: [], customerRequests: [], approvalFilters: { tab: "pending", query: "", from: "", to: "", page: 1 }, catalogs: null, reports: null, surveyResults: null, loaded: new Set() };
 const escapeHtml = value => String(value ?? "").replace(/[&<>"]/g, character => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[character]);
 const initials = name => String(name || "?").trim().split(/\s+/).slice(-2).map(word => word[0]).join("").toUpperCase();
 const formatDate = value => value ? new Date(value).toLocaleDateString("vi-VN") : "—";
@@ -26,15 +26,19 @@ function dashboard() {
 
 function customerTable(rows, showActions = false) {
   const actions = c => currentRole === "admin"
-    ? `<button class="outline customer-status" data-id="${c.id}" data-status="${c.status === "locked" ? "active" : "locked"}">${c.status === "locked" ? "Mở khóa" : "Khóa"}</button><button class="outline customer-delete" data-id="${c.id}" data-name="${escapeHtml(c.name)}">Xóa</button>`
-    : `<button class="outline customer-edit" data-id="${c.id}">Sửa hồ sơ</button>${c.status === "active" ? `<button class="outline customer-lock-request" data-id="${c.id}" data-name="${escapeHtml(c.name)}">Yêu cầu khóa</button>` : ""}<button class="outline customer-delete-request" data-id="${c.id}" data-name="${escapeHtml(c.name)}">Yêu cầu xóa</button>`;
+    ? `<button class="outline customer-status" data-id="${c.id}" data-status="${c.status === "locked" ? "active" : "locked"}">${c.status === "locked" ? "Mở khóa" : "Khóa"}</button>`
+    : `<button class="outline customer-edit" data-id="${c.id}">Sửa hồ sơ</button>${c.status === "active" ? `<button class="outline customer-lock-request" data-id="${c.id}" data-name="${escapeHtml(c.name)}">Yêu cầu khóa</button>` : ""}`;
   return `<div class="table-wrap"><table><thead><tr><th>Khách hàng</th><th>Mã thành viên</th><th>Tuổi</th><th>Sở thích</th><th>Trạng thái</th><th>Cập nhật</th>${showActions ? "<th>Thao tác</th>" : ""}</tr></thead><tbody>${rows.map(c => `<tr><td><div class="customer"><span class="avatar">${initials(c.name)}</span><div><strong>${escapeHtml(c.name)}</strong><small>${escapeHtml(c.username || "Khách hàng CRM")}</small></div></div></td><td><code>${escapeHtml(c.code)}</code></td><td>${c.age}</td><td>${escapeHtml(c.preference)}</td><td><span class="status ${c.status === "locked" ? "locked" : "active"}"><i></i>${statusLabel(c.status)}</span></td><td class="muted">${formatDate(c.updatedAt)}</td>${showActions ? `<td class="customer-actions">${actions(c)}</td>` : ""}</tr>`).join("")}</tbody></table></div>`;
 }
 
 function customersView() {
   const rows = internalSession.customers;
   const manager = currentRole === "manager";
-  return `<section class="page-heading compact"><div><p class="eyebrow">KHÁCH HÀNG</p><h1>Quản lý khách hàng</h1><p>${manager ? "Tạo, cập nhật hồ sơ và gửi yêu cầu khóa hoặc xóa đến Admin để phê duyệt." : "Theo dõi tài khoản khách hàng, xử lý khóa hoặc xóa dữ liệu theo thẩm quyền Admin."}</p></div>${manager ? `<button class="primary" data-view="create-customer">＋ Thêm khách hàng</button>` : ""}</section><section class="panel list-panel"><div class="list-toolbar"><label class="list-search">⌕<input id="customerSearch" placeholder="Tìm theo tên, mã thành viên..." /></label></div><div id="customerResults">${customerTable(rows, true)}</div><footer class="pagination"><span>Hiển thị ${rows.length} khách hàng từ database</span></footer></section>`;
+  return `<section class="page-heading compact"><div><p class="eyebrow">KHÁCH HÀNG</p><h1>Quản lý khách hàng</h1><p>${manager ? "Tạo, cập nhật hồ sơ và gửi yêu cầu khóa đến Admin để phê duyệt." : "Theo dõi tài khoản khách hàng và xử lý khóa/mở khóa theo thẩm quyền Admin."}</p></div>${manager ? `<button class="primary" data-view="create-customer">＋ Thêm khách hàng</button>` : ""}</section><section class="panel list-panel"><div class="list-toolbar"><label class="list-search">⌕<input id="customerSearch" placeholder="Tìm theo tên, mã thành viên..." /></label></div><div id="customerResults">${customerTable(rows, true)}</div><footer class="pagination"><span>Hiển thị ${rows.length} khách hàng từ database</span></footer></section>${manager ? "" : accountStatusDialog()}`;
+}
+
+function accountStatusDialog() {
+  return `<dialog class="manager-edit-dialog" id="accountStatusDialog" aria-labelledby="accountStatusTitle"><form class="profile-form" id="accountStatusForm"><div class="form-heading"><h2 id="accountStatusTitle">Xác nhận thay đổi trạng thái</h2><p id="accountStatusDescription"></p></div><div class="auth-error" id="accountStatusError" role="alert"></div><footer><button class="outline" id="accountStatusCancel" type="button">Hủy</button><button class="primary" type="submit">Xác nhận</button></footer></form></dialog>`;
 }
 
 function createCustomerView() {
@@ -87,8 +91,8 @@ function adminDashboard() {
   const summary = internalSession.dashboard?.summary || {};
   updateApprovalBadges();
   return `<section class="page-heading compact"><div><p class="eyebrow">QUẢN TRỊ TỐI CAO</p><h1>Trung tâm quản trị Admin</h1><p>Quản lý nhân sự, phán quyết yêu cầu nhạy cảm và giám sát thay đổi dữ liệu khách hàng.</p></div></section>
-  <section class="metrics governance-metrics">${metric("Manager nội bộ", internalSession.managers.length, "Nhân sự", "quản lý tại hệ thống", "blue")}${metric("Khách hàng", summary.totalCustomers ?? "—", "Hồ sơ", "đang lưu trong CRM", "green")}${metric("Yêu cầu chờ duyệt", internalSession.customerRequests.filter(item => item.status === "pending").length, "Cần xử lý", "yêu cầu khóa hoặc xóa", "amber")}${metric("Nhật ký Customer", internalSession.customerAudit.length, "Tối đa 500", "thay đổi gần nhất", "rose")}</section>
-  <section class="governance-grid"><button class="panel governance-card" data-view="accounts"><span>01 · NHÂN SỰ</span><h2>Quản lý Manager</h2><p>Tạo tài khoản, cập nhật thông tin công tác và khóa tài khoản nội bộ.</p><strong>Mở quản lý Manager →</strong></button><button class="panel governance-card" data-view="customer-requests"><span>02 · PHÁN QUYẾT</span><h2>Yêu cầu từ Manager</h2><p>Xem xét lý do và phê duyệt hoặc từ chối yêu cầu khóa tài khoản hoặc xóa dữ liệu khách hàng.</p><strong>Xem yêu cầu →</strong></button><button class="panel governance-card" data-view="customers"><span>03 · DỮ LIỆU KHÁCH HÀNG</span><h2>Quản lý Customer</h2><p>Trực tiếp khóa, mở khóa hoặc xóa dữ liệu khách hàng khi cần thiết.</p><strong>Mở danh sách Customer →</strong></button><button class="panel governance-card" data-view="customer-audit"><span>04 · GIÁM SÁT</span><h2>Audit Log & Rollback</h2><p>Kiểm tra thao tác thêm, sửa, xóa và khôi phục thay đổi phù hợp.</p><strong>Xem nhật ký →</strong></button></section>`;
+  <section class="metrics governance-metrics">${metric("Manager nội bộ", internalSession.managers.length, "Nhân sự", "quản lý tại hệ thống", "blue")}${metric("Khách hàng", summary.totalCustomers ?? "—", "Hồ sơ", "đang lưu trong CRM", "green")}${metric("Yêu cầu chờ duyệt", internalSession.customerRequests.filter(item => item.status === "pending").length, "Cần xử lý", "yêu cầu khóa tài khoản", "amber")}</section>
+  <section class="governance-grid"><button class="panel governance-card" data-view="accounts"><span>01 · NHÂN SỰ</span><h2>Quản lý Manager</h2><p>Tạo tài khoản, cập nhật thông tin công tác và khóa tài khoản nội bộ.</p><strong>Mở quản lý Manager →</strong></button><button class="panel governance-card" data-view="customer-requests"><span>02 · PHÁN QUYẾT</span><h2>Yêu cầu từ Manager</h2><p>Xem xét lý do và phê duyệt hoặc từ chối yêu cầu khóa tài khoản khách hàng.</p><strong>Xem yêu cầu →</strong></button><button class="panel governance-card" data-view="customers"><span>03 · DỮ LIỆU KHÁCH HÀNG</span><h2>Quản lý Customer</h2><p>Trực tiếp khóa hoặc mở khóa tài khoản khách hàng khi cần thiết.</p><strong>Mở danh sách Customer →</strong></button></section>`;
 }
 
 function accountsView() {
@@ -96,7 +100,7 @@ function accountsView() {
   return `<section class="page-heading compact"><div><p class="eyebrow">QUẢN TRỊ NHÂN SỰ NỘI BỘ</p><h1>Quản lý Manager</h1><p>Tạo tài khoản nhân viên, cập nhật thông tin công tác và khóa tài khoản khi cần.</p></div></section>
     <form class="panel profile-form manager-create-form" id="createManagerForm"><div class="form-heading"><h2>Thêm tài khoản Manager</h2></div><div class="form-grid"><label>Tên đăng nhập *<input name="tenDangNhap" minlength="3" maxlength="100" pattern="[A-Za-z0-9._-]+" required /></label><label>Mật khẩu ban đầu *<input name="matKhau" type="password" minlength="8" maxlength="128" autocomplete="new-password" required /></label><label>Họ và tên *<input name="hoTen" minlength="2" maxlength="150" required /></label><label>Chức vụ *<input name="chucVu" minlength="2" maxlength="150" required /></label><label>Bộ phận<input name="boPhan" maxlength="150" /></label></div><div class="auth-error" id="createManagerError" role="alert"></div><footer><button class="primary" type="submit">Tạo tài khoản Manager</button></footer></form>
     <section class="panel list-panel"><div class="panel-title"><div><h2>Nhân sự Manager</h2><p>${rows.length} tài khoản</p></div></div><div class="table-wrap"><table><thead><tr><th>Nhân viên</th><th>Chức vụ</th><th>Bộ phận</th><th>Trạng thái</th><th>Ngày tạo</th><th>Thao tác</th></tr></thead><tbody>${rows.map(manager => `<tr><td><div class="customer"><span class="avatar mint">${initials(manager.fullName || manager.username)}</span><div><strong>${escapeHtml(manager.fullName || manager.username)}</strong><small>${escapeHtml(manager.username)}</small></div></div></td><td>${escapeHtml(manager.jobTitle || "Chưa cập nhật")}</td><td>${escapeHtml(manager.department || "—")}</td><td><span class="status ${manager.status === "locked" ? "locked" : "active"}"><i></i>${statusLabel(manager.status)}</span></td><td class="muted">${formatDate(manager.createdAt)}</td><td class="customer-actions"><button class="outline manager-edit" data-id="${manager.id}">Sửa công tác</button><button class="outline manager-status" data-id="${manager.id}" data-status="${manager.status === "locked" ? "active" : "locked"}">${manager.status === "locked" ? "Mở khóa" : "Khóa tài khoản"}</button></td></tr>`).join("") || `<tr><td colspan="6">Chưa có tài khoản Manager.</td></tr>`}</tbody></table></div></section>
-    <dialog class="manager-edit-dialog" id="managerEditDialog" aria-labelledby="managerEditTitle"><form class="profile-form" id="managerEditForm"><div class="form-heading"><h2 id="managerEditTitle">Sửa thông tin công tác</h2><p>Cập nhật thông tin nhân viên Manager.</p></div><div class="form-grid"><label>Họ và tên *<input name="hoTen" minlength="2" maxlength="150" required /></label><label>Chức vụ *<input name="chucVu" minlength="2" maxlength="150" required /></label><label>Bộ phận<input name="boPhan" maxlength="150" /></label></div><div class="auth-error" id="managerEditError" role="alert"></div><footer><button class="outline" id="managerEditCancel" type="button">Hủy</button><button class="primary" type="submit">Lưu thay đổi</button></footer></form></dialog>`;
+    <dialog class="manager-edit-dialog" id="managerEditDialog" aria-labelledby="managerEditTitle"><form class="profile-form" id="managerEditForm"><div class="form-heading"><h2 id="managerEditTitle">Sửa thông tin công tác</h2><p>Cập nhật thông tin nhân viên Manager.</p></div><div class="form-grid"><label>Họ và tên *<input name="hoTen" minlength="2" maxlength="150" required /></label><label>Chức vụ *<input name="chucVu" minlength="2" maxlength="150" required /></label><label>Bộ phận<input name="boPhan" maxlength="150" /></label></div><div class="auth-error" id="managerEditError" role="alert"></div><footer><button class="outline" id="managerEditCancel" type="button">Hủy</button><button class="primary" type="submit">Lưu thay đổi</button></footer></form></dialog>${accountStatusDialog()}`;
 }
 
 function customerRequestsView() {
@@ -106,17 +110,15 @@ function customerRequestsView() {
   const tabCounts = {
     pending: requests.filter(item => item.status === "pending").length,
     lock_customer: requests.filter(item => item.status === "pending" && item.action === "lock_customer").length,
-    delete_customer: requests.filter(item => item.status === "pending" && item.action === "delete_customer").length,
     history: requests.filter(item => item.status !== "pending").length
   };
   const tabs = [
     ["pending", "Chờ duyệt"],
     ["lock_customer", "Yêu cầu khóa"],
-    ["delete_customer", "Yêu cầu xóa"],
     ["history", "Lịch sử"]
   ];
   updateApprovalBadges();
-  return `<section class="page-heading compact"><div><p class="eyebrow">${admin ? "QUẢN TRỊ TỐI CAO" : "YÊU CẦU ĐÃ GỬI"}</p><h1>${admin ? "Trung tâm phê duyệt" : "Yêu cầu gửi Admin"}</h1><p>${admin ? "Tập trung xử lý yêu cầu khóa hoặc xóa; các quyết định đã xử lý được lưu trong lịch sử." : "Theo dõi trạng thái các yêu cầu khóa hoặc xóa khách hàng của bạn."}</p></div></section>
+  return `<section class="page-heading compact"><div><p class="eyebrow">${admin ? "QUẢN TRỊ TỐI CAO" : "YÊU CẦU ĐÃ GỬI"}</p><h1>${admin ? "Trung tâm phê duyệt" : "Yêu cầu gửi Admin"}</h1><p>${admin ? "Tập trung xử lý yêu cầu khóa tài khoản; các quyết định đã xử lý được lưu trong lịch sử." : "Theo dõi trạng thái yêu cầu khóa khách hàng đã gửi."}</p></div></section>
     <section class="panel approval-center" id="customerRequestCenter">
       <div class="approval-tabs" role="tablist" aria-label="Lọc yêu cầu khách hàng">${tabs.map(([key, label]) => `<button class="approval-tab ${filters.tab === key ? "active" : ""}" id="approval-tab-${key}" type="button" role="tab" aria-selected="${filters.tab === key}" data-tab="${key}">${label}<span>${tabCounts[key]}</span></button>`).join("")}</div>
       <div class="approval-filters"><label class="approval-search">⌕<input id="approvalSearch" type="search" value="${escapeHtml(filters.query)}" placeholder="${admin ? "Tìm khách hàng, Manager, lý do..." : "Tìm khách hàng hoặc lý do..."}" /></label><label>Từ ngày<input id="approvalFrom" type="date" value="${escapeHtml(filters.from)}" /></label><label>Đến ngày<input id="approvalTo" type="date" value="${escapeHtml(filters.to)}" /></label></div>
@@ -148,9 +150,7 @@ function customerRequestResults(requests, filters, admin) {
   const visible = filtered.slice((filters.page - 1) * pageSize, filters.page * pageSize);
   const emptyMessage = filters.tab === "history" ? "Chưa có yêu cầu nào trong lịch sử" : admin ? "Không có yêu cầu phù hợp đang chờ xử lý" : "Bạn chưa gửi yêu cầu nào";
   const cards = visible.map(item => {
-    const deleting = item.action === "delete_customer";
-    const actionLabel = deleting ? "Yêu cầu xóa dữ liệu khách hàng" : "Yêu cầu khóa tài khoản";
-    return `<article class="panel request-card"><div class="request-heading"><div><span class="status ${item.status === "pending" ? "new" : item.status === "approved" ? "active" : "locked"}">${item.status === "pending" ? "Chờ duyệt" : item.status === "approved" ? "Đã duyệt" : "Đã từ chối"}</span><h2>${escapeHtml(item.customerName || "Khách hàng không còn tồn tại")}</h2><p>Manager: ${escapeHtml(item.requesterName || item.requesterUsername || "Bạn")} · ${formatDate(item.createdAt)}</p></div><span class="request-tag">${actionLabel}</span></div><p class="request-reason"><strong>Lý do:</strong> ${escapeHtml(item.reason)}</p>${item.decisionNote ? `<p class="form-note"><strong>Ghi chú Admin:</strong> ${escapeHtml(item.decisionNote)}</p>` : ""}${admin && item.status === "pending" ? `<footer><button class="outline request-reject" data-id="${item.id}">Từ chối</button><button class="primary request-approve" data-id="${item.id}" data-action="${item.action}">Phê duyệt & ${deleting ? "xóa" : "khóa"}</button></footer>` : ""}</article>`;
+    return `<article class="panel request-card"><div class="request-heading"><div><span class="status ${item.status === "pending" ? "new" : item.status === "approved" ? "active" : "locked"}">${item.status === "pending" ? "Chờ duyệt" : item.status === "approved" ? "Đã duyệt" : "Đã từ chối"}</span><h2>${escapeHtml(item.customerName || "Khách hàng không còn tồn tại")}</h2><p>Manager: ${escapeHtml(item.requesterName || item.requesterUsername || "Bạn")} · ${formatDate(item.createdAt)}</p></div><span class="request-tag">Yêu cầu khóa tài khoản</span></div><p class="request-reason"><strong>Lý do:</strong> ${escapeHtml(item.reason)}</p>${item.decisionNote ? `<p class="form-note"><strong>Ghi chú Admin:</strong> ${escapeHtml(item.decisionNote)}</p>` : ""}${admin && item.status === "pending" ? `<footer><button class="outline request-reject" data-id="${item.id}">Từ chối</button><button class="primary request-approve" data-id="${item.id}">Phê duyệt & khóa</button></footer>` : ""}</article>`;
   }).join("");
   const start = filtered.length ? (filters.page - 1) * pageSize + 1 : 0;
   const end = Math.min(filters.page * pageSize, filtered.length);
@@ -170,12 +170,6 @@ function updateApprovalBadges() {
     navBadge.textContent = pending;
     navBadge.hidden = pending === 0;
   }
-}
-
-function customerAuditView() {
-  const entries = internalSession.customerAudit;
-  const actionName = { create: "Thêm khách hàng", update: "Sửa hồ sơ", delete: "Xóa khách hàng" };
-  return `<section class="page-heading compact"><div><p class="eyebrow">GIÁM SÁT TỐI CAO</p><h1>Audit Log Customer</h1><p>Nhật ký thao tác thêm, sửa và xóa; Admin có thể rollback các thay đổi phù hợp nếu trạng thái hiện tại cho phép khôi phục an toàn.</p></div></section><section class="panel list-panel"><div class="table-wrap"><table><thead><tr><th>Thời điểm</th><th>Người thực hiện</th><th>Thao tác</th><th>Customer</th><th>Chi tiết</th><th>Khôi phục</th></tr></thead><tbody>${entries.map(entry => `<tr><td class="muted">${new Date(entry.createdAt).toLocaleString("vi-VN")}</td><td>${escapeHtml(entry.actorName || entry.actorUsername || "Tài khoản đã xóa")}</td><td>${actionName[entry.action] || entry.action}</td><td>${escapeHtml(entry.afterData?.name || entry.beforeData?.name || `#${entry.customerId}`)}</td><td><details><summary>Xem trước / sau</summary><pre>${escapeHtml(JSON.stringify({ before: entry.beforeData, after: entry.afterData }, null, 2))}</pre></details></td><td>${entry.rolledBackAt ? `<span class="status active">Đã rollback</span>` : entry.canRollback ? `<button class="outline audit-rollback" data-id="${entry.id}">Rollback</button>` : "—"}</td></tr>`).join("") || `<tr><td colspan="6">Chưa có nhật ký khách hàng.</td></tr>`}</tbody></table></div><footer class="pagination"><span>${entries.length} nhật ký gần nhất (tối đa 500)</span></footer></section><dialog class="manager-edit-dialog audit-rollback-dialog" id="auditRollbackDialog" aria-labelledby="auditRollbackTitle"><form id="auditRollbackForm"><div class="form-heading"><h2 id="auditRollbackTitle">Xác nhận rollback</h2><p>Khôi phục hồ sơ về trạng thái trước thao tác này?</p></div><p class="form-note">Nếu hồ sơ đã thay đổi tiếp, hệ thống sẽ từ chối rollback để tránh ghi đè.</p><div class="auth-error" id="auditRollbackError" role="alert"></div><footer><button class="outline" id="auditRollbackCancel" type="button">Hủy</button><button class="primary" type="submit">Xác nhận rollback</button></footer></form></dialog>`;
 }
 
 function internalLoginView() {
@@ -227,11 +221,11 @@ function surveyTakeView() {
 function placeholder(name, desc) { return `<section class="page-heading compact"><div><p class="eyebrow">MILKTEA-COFFEE</p><h1>${name}</h1><p>${desc}</p></div></section><section class="panel empty-state"><span>✦</span><h2>Khu vực đang được hoàn thiện</h2><p>Cấu trúc màn hình đã sẵn sàng để kết nối endpoint tương ứng trong REST API.</p><button class="primary action-toast">Xem tài liệu API</button></section>`; }
 
 const managerViews = { "internal-login": internalLoginView, dashboard, customers: customersView, "create-customer": createCustomerView, "customer-requests": customerRequestsView, feedback: feedbackView, surveys: surveysView, "create-survey": createSurveyView, "edit-survey": editSurveyView, reports: customerReportsView, "survey-results": surveyResultsView };
-const adminViews = { "internal-login": internalLoginView, "admin-dashboard": adminDashboard, accounts: accountsView, customers: customersView, "customer-requests": customerRequestsView, "customer-audit": customerAuditView };
+const adminViews = { "internal-login": internalLoginView, "admin-dashboard": adminDashboard, accounts: accountsView, customers: customersView, "customer-requests": customerRequestsView };
 const customerViews = { login: loginView, register: registerView, "customer-home": customerHome, profile: profileView, "my-feedback": myFeedbackView, "my-surveys": mySurveysView, notifications: notificationsView, "take-survey": surveyTakeView };
-const titles = { "internal-login": "Đăng nhập nội bộ", "admin-dashboard": "Quản trị tối cao", accounts: "Quản lý Manager", "customer-audit": "Audit Log Customer", "customer-requests": "Yêu cầu Admin", "admin-catalog": "Danh mục", dashboard: "Tổng quan", customers: "Khách hàng", "create-customer": "Thêm khách hàng", feedback: "Phản hồi", surveys: "Khảo sát", "create-survey": "Tạo khảo sát", "edit-survey": "Sửa khảo sát", "survey-results": "Kết quả khảo sát", reports: "Báo cáo khách hàng", settings: "Cài đặt", login: "Đăng nhập", register: "Đăng ký", "customer-home": "Trang chủ", profile: "Hồ sơ", "my-feedback": "Phản hồi của tôi", "my-surveys": "Khảo sát của tôi", notifications: "Thông báo", "take-survey": "Thực hiện khảo sát" };
+const titles = { "internal-login": "Đăng nhập nội bộ", "admin-dashboard": "Quản trị tối cao", accounts: "Quản lý Manager", "customer-requests": "Yêu cầu Admin", "admin-catalog": "Danh mục", dashboard: "Tổng quan", customers: "Khách hàng", "create-customer": "Thêm khách hàng", feedback: "Phản hồi", surveys: "Khảo sát", "create-survey": "Tạo khảo sát", "edit-survey": "Sửa khảo sát", "survey-results": "Kết quả khảo sát", reports: "Báo cáo khách hàng", settings: "Cài đặt", login: "Đăng nhập", register: "Đăng ký", "customer-home": "Trang chủ", profile: "Hồ sơ", "my-feedback": "Phản hồi của tôi", "my-surveys": "Khảo sát của tôi", notifications: "Thông báo", "take-survey": "Thực hiện khảo sát" };
 const navs = {
-  admin: `<p class="nav-label">Quản trị tối cao</p><button class="nav-item" data-view="admin-dashboard"><span class="icon">⌂</span>Tổng quan</button><button class="nav-item" data-view="accounts"><span class="icon">♧</span>Quản lý Manager</button><button class="nav-item" data-view="customer-requests"><span class="icon">◌</span>Trung tâm phê duyệt <b id="approvalNavCount" hidden></b></button><button class="nav-item" data-view="customers"><span class="icon">♧</span>Khách hàng</button><button class="nav-item" data-view="customer-audit"><span class="icon">⌁</span>Audit Log & Rollback</button>`,
+  admin: `<p class="nav-label">Quản trị tối cao</p><button class="nav-item" data-view="admin-dashboard"><span class="icon">⌂</span>Tổng quan</button><button class="nav-item" data-view="accounts"><span class="icon">♧</span>Quản lý Manager</button><button class="nav-item" data-view="customer-requests"><span class="icon">◌</span>Trung tâm phê duyệt <b id="approvalNavCount" hidden></b></button><button class="nav-item" data-view="customers"><span class="icon">♧</span>Khách hàng</button>`,
   manager: `<p class="nav-label">Không gian làm việc</p><button class="nav-item" data-view="dashboard"><span class="icon">⌂</span>Tổng quan</button><button class="nav-item" data-view="customers"><span class="icon">♧</span>Khách hàng <b id="customerCount">…</b></button><button class="nav-item" data-view="customer-requests"><span class="icon">◌</span>Yêu cầu Admin</button><button class="nav-item" data-view="feedback"><span class="icon">◌</span>Phản hồi <i id="feedbackCount">…</i></button><button class="nav-item" data-view="surveys"><span class="icon">✓</span>Khảo sát</button><button class="nav-item" data-view="reports"><span class="icon">⌁</span>Báo cáo</button>`,
   customer: `<p class="nav-label">Tài khoản của tôi</p><button class="nav-item" data-view="customer-home"><span class="icon">⌂</span>Trang chủ</button><button class="nav-item" data-view="profile"><span class="icon">♧</span>Hồ sơ cá nhân</button><button class="nav-item" data-view="my-feedback"><span class="icon">♡</span>Phản hồi của tôi</button><button class="nav-item" data-view="my-surveys"><span class="icon">✓</span>Khảo sát</button><button class="nav-item" data-view="notifications"><span class="icon">♢</span>Thông báo <i id="notificationCount">0</i></button><p class="nav-label">Hỗ trợ</p><button class="nav-item action-toast"><span class="icon">?</span>Trung tâm trợ giúp</button>`
 };
@@ -452,13 +446,12 @@ async function setupInternalPage(view, renderVersion) {
     }
     const loaders = {
       "admin-dashboard": async () => {
-        const [dashboardData, managersData, requestsData, auditData] = await Promise.all([
-          internalApi.dashboard(), internalApi.managers(), internalApi.customerRequests(), internalApi.customerAudit()
+        const [dashboardData, managersData, requestsData] = await Promise.all([
+          internalApi.dashboard(), internalApi.managers(), internalApi.customerRequests()
         ]);
         internalSession.dashboard = dashboardData;
         internalSession.managers = managersData.managers;
         internalSession.customerRequests = requestsData.requests;
-        internalSession.customerAudit = auditData.entries;
       },
       dashboard: async () => { internalSession.dashboard = await internalApi.dashboard(); },
       customers: async () => { internalSession.customers = (await internalApi.customers()).customers; },
@@ -469,7 +462,6 @@ async function setupInternalPage(view, renderVersion) {
       "create-survey": async () => { internalSession.customers = (await internalApi.customers()).customers; },
       reports: async () => { internalSession.reports = await internalApi.customerReports(); },
       accounts: async () => { internalSession.managers = (await internalApi.managers()).managers; },
-      "customer-audit": async () => { internalSession.customerAudit = (await internalApi.customerAudit()).entries; },
       "admin-catalog": async () => { internalSession.catalogs = await internalApi.catalogs(); }
     };
     if (loaders[view] && !internalSession.loaded.has(view)) {
@@ -521,7 +513,6 @@ async function setupInternalPage(view, renderVersion) {
         await internalApi.createManager(formPayload(form));
         internalSession.loaded.delete("accounts");
         internalSession.loaded.delete("admin-dashboard");
-        internalSession.loaded.delete("customer-audit");
         notify("Đã tạo tài khoản Manager");
         render("accounts");
       } catch (error) {
@@ -529,27 +520,70 @@ async function setupInternalPage(view, renderVersion) {
         setFormBusy(form, false);
       }
     });
+    const accountStatusModal = document.querySelector("#accountStatusDialog");
+    const accountStatusForm = document.querySelector("#accountStatusForm");
+    const openAccountStatusModal = (resource, id, status, name) => {
+      accountStatusForm.dataset.resource = resource;
+      accountStatusForm.dataset.id = id;
+      accountStatusForm.dataset.status = status;
+      const action = status === "locked" ? "khóa" : "mở khóa";
+      const accountType = resource === "manager" ? "Manager" : "khách hàng";
+      document.querySelector("#accountStatusDescription").textContent =
+        `Bạn có chắc muốn ${action} tài khoản ${accountType} "${name}"?`;
+      document.querySelector("#accountStatusError").textContent = "";
+      const submitButton = accountStatusForm.querySelector("button[type='submit']");
+      submitButton.textContent = `Xác nhận ${action}`;
+      submitButton.disabled = false;
+      accountStatusModal.showModal();
+    };
+    document.querySelector("#accountStatusCancel")?.addEventListener("click", () => accountStatusModal.close());
+    accountStatusForm?.addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const submitButton = form.querySelector("button[type='submit']");
+      const { resource, id, status } = form.dataset;
+      submitButton.disabled = true;
+      submitButton.textContent = "Đang xử lý...";
+      document.querySelector("#accountStatusError").textContent = "";
+      try {
+        if (resource === "customer") {
+          await internalApi.updateCustomerStatus(id, status);
+          internalSession.loaded.delete("customers");
+          notify(status === "locked" ? "Đã khóa tài khoản khách hàng" : "Đã mở khóa tài khoản khách hàng");
+        } else {
+          const manager = internalSession.managers.find(item => String(item.id) === String(id));
+          if (!manager) throw new Error("Không tìm thấy tài khoản Manager cần cập nhật.");
+          await internalApi.updateManager(id, {
+            hoTen: manager.fullName || manager.username,
+            chucVu: manager.jobTitle || "",
+            boPhan: manager.department || "",
+            status
+          });
+          internalSession.loaded.delete("accounts");
+          notify(status === "locked" ? "Đã khóa tài khoản Manager" : "Đã mở khóa tài khoản Manager");
+        }
+        internalSession.loaded.delete("admin-dashboard");
+        accountStatusModal.close();
+        render(resource === "manager" ? "accounts" : "customers");
+      } catch (error) {
+        document.querySelector("#accountStatusError").textContent = error.message;
+        submitButton.disabled = false;
+        submitButton.textContent = `Xác nhận ${status === "locked" ? "khóa" : "mở khóa"}`;
+      }
+    });
     document.querySelector("#customerResults")?.addEventListener("click", async event => {
       const statusButton = event.target.closest(".customer-status");
-      const deleteButton = event.target.closest(".customer-delete");
       const editButton = event.target.closest(".customer-edit");
       const requestButton = event.target.closest(".customer-lock-request");
-      const deleteRequestButton = event.target.closest(".customer-delete-request");
-      const actionButton = statusButton || deleteButton || editButton || requestButton || deleteRequestButton;
+      const actionButton = statusButton || editButton || requestButton;
       if (!actionButton) return;
       const customerId = actionButton.dataset.id;
       try {
         if (statusButton) {
-          const nextStatus = statusButton.dataset.status;
-          const action = nextStatus === "locked" ? "khóa" : "mở khóa";
-          if (!window.confirm(`Bạn có chắc muốn ${action} tài khoản khách hàng này?`)) return;
-          await internalApi.updateCustomerStatus(customerId, nextStatus);
-          notify(nextStatus === "locked" ? "Đã khóa tài khoản khách hàng" : "Đã mở khóa tài khoản khách hàng");
-        } else if (deleteButton) {
-          const warning = `Xóa vĩnh viễn khách hàng "${deleteButton.dataset.name}"? Hồ sơ, phản hồi và câu trả lời khảo sát của khách này cũng sẽ bị xóa.`;
-          if (!window.confirm(warning)) return;
-          await internalApi.deleteCustomer(customerId);
-          notify("Đã xóa khách hàng");
+          const customer = internalSession.customers.find(item => String(item.id) === String(customerId));
+          if (!customer) throw new Error("Không tìm thấy hồ sơ khách hàng cần cập nhật.");
+          openAccountStatusModal("customer", customerId, statusButton.dataset.status, customer.name);
+          return;
         } else if (editButton) {
           const customer = internalSession.customers.find(item => String(item.id) === String(customerId));
           const hoTen = window.prompt("Họ và tên khách hàng:", customer.name);
@@ -561,22 +595,19 @@ async function setupInternalPage(view, renderVersion) {
           const soThichId = window.prompt(`Mã sở thích hiện tại là ${customer.preferenceId}. Nhập mã sở thích mới:`, customer.preferenceId);
           if (soThichId === null) return;
           await internalApi.updateCustomer(customerId, { hoTen, namSinh: Number(namSinh), gioiTinh, soThichId: Number(soThichId) });
-          notify("Đã cập nhật hồ sơ; thao tác được ghi vào Audit Log");
-        } else if (requestButton || deleteRequestButton) {
-          const action = deleteRequestButton ? "delete_customer" : "lock_customer";
-          const verb = deleteRequestButton ? "xóa dữ liệu" : "khóa tài khoản";
-          const reason = window.prompt(`Lý do yêu cầu ${verb} "${actionButton.dataset.name}":`);
+          notify("Đã cập nhật hồ sơ");
+        } else if (requestButton) {
+          const reason = window.prompt(`Lý do yêu cầu khóa tài khoản "${actionButton.dataset.name}":`);
           if (reason === null) return;
-          await internalApi.createCustomerRequest({ customerId: Number(customerId), action, reason });
+          await internalApi.createCustomerRequest({ customerId: Number(customerId), action: "lock_customer", reason });
           internalSession.loaded.delete("customer-requests");
-          notify(`Đã gửi yêu cầu ${deleteRequestButton ? "xóa" : "khóa"} đến Admin`);
+          notify("Đã gửi yêu cầu khóa đến Admin");
         } else {
           return;
         }
         internalSession.loaded.delete("customers");
         internalSession.loaded.delete("admin-dashboard");
         internalSession.loaded.delete("dashboard");
-        internalSession.loaded.delete("customer-audit");
         internalSession.customers = (await internalApi.customers()).customers;
         internalSession.loaded.add("customers");
         render("customers");
@@ -625,38 +656,19 @@ async function setupInternalPage(view, renderVersion) {
       managerEditForm.querySelector("button[type='submit']").disabled = false;
       managerEditDialog.showModal();
     }));
-    document.querySelectorAll(".manager-status").forEach(button => button.addEventListener("click", async () => {
+    document.querySelectorAll(".manager-status").forEach(button => button.addEventListener("click", () => {
       const manager = internalSession.managers.find(item => String(item.id) === button.dataset.id);
       if (!manager) return;
-      const status = button.dataset.status;
-      if (!window.confirm(`${status === "locked" ? "Khóa" : "Mở khóa"} tài khoản Manager ${manager.username}?`)) return;
-      button.disabled = true;
-      try {
-        await internalApi.updateManager(manager.id, {
-          hoTen: manager.fullName || manager.username,
-          chucVu: manager.jobTitle || "",
-          boPhan: manager.department || "",
-          status
-        });
-        internalSession.loaded.delete("accounts");
-        internalSession.loaded.delete("admin-dashboard");
-        notify(status === "locked" ? "Đã khóa tài khoản Manager" : "Đã mở khóa tài khoản Manager");
-        render("accounts");
-      } catch (error) {
-        notify(error.message);
-        button.disabled = false;
-      }
+      openAccountStatusModal("manager", manager.id, button.dataset.status, manager.fullName || manager.username);
     }));
     const requestCenter = document.querySelector("#customerRequestCenter");
     requestCenter?.addEventListener("click", async event => {
       const decisionButton = event.target.closest(".request-approve, .request-reject");
       if (decisionButton) {
         const approved = decisionButton.classList.contains("request-approve");
-        const deleting = decisionButton.dataset.action === "delete_customer";
         const note = approved ? "" : window.prompt("Ghi chú khi từ chối yêu cầu (không bắt buộc):", "");
         if (note === null) return;
-        const actionLabel = deleting ? "xóa dữ liệu khách hàng" : "khóa tài khoản khách hàng";
-        if (!window.confirm(approved ? `Phê duyệt yêu cầu và ${actionLabel}?` : `Từ chối yêu cầu ${deleting ? "xóa khách hàng" : "khóa khách hàng"} này?`)) return;
+        if (!window.confirm(approved ? "Phê duyệt yêu cầu khóa tài khoản khách hàng?" : "Từ chối yêu cầu khóa khách hàng này?")) return;
         decisionButton.disabled = true;
         try {
           await internalApi.decideCustomerRequest(decisionButton.dataset.id, approved ? "approved" : "rejected", note);
@@ -664,9 +676,7 @@ async function setupInternalPage(view, renderVersion) {
           internalSession.loaded.delete("admin-dashboard");
           internalSession.loaded.delete("customers");
           internalSession.approvalFilters.page = 1;
-          notify(approved
-            ? deleting ? "Đã phê duyệt và xóa khách hàng" : "Đã phê duyệt và khóa khách hàng"
-            : "Đã từ chối yêu cầu");
+          notify(approved ? "Đã phê duyệt và khóa khách hàng" : "Đã từ chối yêu cầu");
           render("customer-requests");
         } catch (error) {
           notify(error.message);
@@ -707,32 +717,6 @@ async function setupInternalPage(view, renderVersion) {
         filters,
         currentRole === "admin"
       );
-    });
-    const auditRollbackDialog = document.querySelector("#auditRollbackDialog");
-    const auditRollbackForm = document.querySelector("#auditRollbackForm");
-    document.querySelector("#auditRollbackCancel")?.addEventListener("click", () => auditRollbackDialog.close());
-    document.querySelectorAll(".audit-rollback").forEach(button => button.addEventListener("click", () => {
-      auditRollbackForm.dataset.id = button.dataset.id;
-      document.querySelector("#auditRollbackError").textContent = "";
-      auditRollbackForm.querySelector("button[type='submit']").disabled = false;
-      auditRollbackDialog.showModal();
-    }));
-    auditRollbackForm?.addEventListener("submit", async event => {
-      event.preventDefault();
-      const form = event.currentTarget;
-      const submitButton = form.querySelector("button[type='submit']");
-      submitButton.disabled = true;
-      try {
-        await internalApi.rollbackCustomerAudit(form.dataset.id);
-        internalSession.loaded.delete("customer-audit");
-        internalSession.loaded.delete("admin-dashboard");
-        internalSession.loaded.delete("customers");
-        notify("Đã rollback thay đổi khách hàng");
-        render("customer-audit");
-      } catch (error) {
-        document.querySelector("#auditRollbackError").textContent = error.message;
-        submitButton.disabled = false;
-      }
     });
     document.querySelectorAll(".feedback-update").forEach(button => button.addEventListener("click", async () => {
       button.disabled = true;
@@ -899,8 +883,10 @@ function switchRole(role) {
   internalSession.account = null;
   internalSession.dashboard = null;
   internalSession.loaded.clear();
-  const routes = { admin: "http://127.0.0.1:4173/", manager: "http://127.0.0.1:4174/", customer: "http://127.0.0.1:4175/" };
-  location.assign(routes[role]);
+  const portalPorts = { admin: 4173, manager: 4174, customer: 4175 };
+  const destination = new URL("/", location.origin);
+  destination.port = String(portalPorts[role]);
+  location.assign(destination);
 }
 
 async function initializeRole(role) {

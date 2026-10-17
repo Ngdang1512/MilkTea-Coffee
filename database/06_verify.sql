@@ -60,9 +60,6 @@ SELECT pg_temp.expect_error($q$SELECT crm_phat_hanh_khao_sat(2,3,ARRAY[]::bigint
 SELECT pg_temp.assert_true((SELECT trang_thai='nhap' FROM khao_sat WHERE id=3),'Phát hành lỗi trả khảo sát về nháp');
 SELECT pg_temp.expect_error($q$SELECT crm_phat_hanh_khao_sat(2,3,ARRAY[11]::bigint[])$q$,'bị khóa','Không gửi mới đến tài khoản bị khóa');
 SELECT pg_temp.expect_error($q$DELETE FROM lua_chon WHERE cau_hoi_id=5 AND id<>13; SELECT crm_phat_hanh_khao_sat(2,3,ARRAY[8]::bigint[])$q$,'ít nhất hai lựa chọn','Không phát hành câu hỏi thiếu lựa chọn');
-SELECT pg_temp.expect_error($q$SELECT crm_xoa_khach_hang(4,5)$q$,'Không có quyền','Khách hàng không được xóa tài khoản khác');
-SELECT pg_temp.expect_error($q$SELECT crm_xoa_khach_hang(2,5)$q$,'Không có quyền','Manager không được xóa khách hàng trực tiếp');
-SELECT pg_temp.expect_error($q$SELECT crm_xoa_khach_hang(1,1)$q$,'Khách hàng không tồn tại','Hàm xóa khách không xóa tài khoản admin');
 SELECT pg_temp.expect_error($q$DELETE FROM do_uong WHERE id=1$q$,'foreign key constraint','Không xóa món đang có lịch sử phản hồi');
 
 SELECT crm_dat_trang_thai_khach_hang(2,6,'locked');
@@ -75,12 +72,6 @@ SELECT crm_nop_khao_sat(8,3,'[{"cau_hoi_id":5,"lua_chon_id":13}]');
 SELECT pg_temp.assert_true((SELECT ngay_hoan_thanh IS NOT NULL FROM phan_phoi_khao_sat WHERE khao_sat_id=3 AND khach_hang_id=8),'Cho phép bỏ qua câu không bắt buộc');
 SELECT pg_temp.expect_error($q$SELECT crm_nop_khao_sat(9,3,'[{"cau_hoi_id":5,"lua_chon_id":13},{"cau_hoi_id":5,"lua_chon_id":14}]')$q$,'unique constraint','Một câu hỏi chỉ chọn một đáp án');
 SELECT pg_temp.expect_error($q$SELECT crm_nop_khao_sat(10,3,'[]')$q$,'chưa được nhận','Hàm nộp chặn khách ngoài danh sách');
-
-SELECT crm_xoa_khach_hang(1,4);
-SET CONSTRAINTS ALL IMMEDIATE;
-SELECT pg_temp.assert_true(NOT EXISTS(SELECT 1 FROM tai_khoan WHERE id=4) AND NOT EXISTS(SELECT 1 FROM khach_hang WHERE tai_khoan_id=4),'Xóa cứng tài khoản và hồ sơ');
-SELECT pg_temp.assert_true(NOT EXISTS(SELECT 1 FROM phan_hoi WHERE khach_hang_id=4) AND NOT EXISTS(SELECT 1 FROM phan_phoi_khao_sat WHERE khach_hang_id=4) AND NOT EXISTS(SELECT 1 FROM cau_tra_loi WHERE khach_hang_id=4),'Xóa cứng dọn đúng các dữ liệu phụ thuộc');
-SELECT pg_temp.assert_true((SELECT count(*)=3 FROM khao_sat) AND (SELECT count(*)=6 FROM cau_hoi) AND (SELECT count(*)=4 FROM cau_tra_loi WHERE khach_hang_id=6),'Xóa khách không ảnh hưởng cấu trúc hay bài khách khác');
 
 UPDATE tai_khoan SET vai_tro='staff' WHERE id=2;
 SELECT crm_dong_khao_sat(1,1);

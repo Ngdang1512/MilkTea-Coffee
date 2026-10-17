@@ -38,12 +38,10 @@ Các phiên đăng nhập dùng Bearer token có hạn 8 giờ; ID tài khoản 
 | `POST` | `/internal/auth/login` | Đăng nhập Admin/Manager |
 | `GET` | `/internal/me`, `/internal/dashboard` | Phiên và tổng quan |
 | `GET` | `/internal/customers` | Danh sách khách hàng (Admin/Manager) |
-| `POST/PATCH` | `/internal/customers[/{id}]` | Manager tạo/sửa khách hàng; thao tác được ghi Audit Log |
-| `PATCH/DELETE` | `/internal/customers/{id}/status`, `/internal/customers/{id}` | Admin khóa/mở khóa hoặc xóa trực tiếp khách hàng |
+| `POST/PATCH` | `/internal/customers[/{id}]` | Manager tạo/sửa khách hàng |
+| `PATCH` | `/internal/customers/{id}/status` | Admin khóa/mở khóa khách hàng |
 | `GET/POST/PATCH` | `/internal/managers[/{id}]` | Admin quản lý nhân sự Manager |
-| `GET/POST/PATCH` | `/internal/customer-requests[/{id}]` | Manager gửi/xem yêu cầu khóa hoặc xóa; Admin duyệt hoặc từ chối (duyệt xóa sẽ xóa dữ liệu khách hàng) |
-| `GET` | `/internal/customer-audit` | Admin xem nhật ký thay đổi Customer |
-| `POST` | `/internal/customer-audit/{id}/rollback` | Admin rollback thao tác Manager nếu dữ liệu hiện tại cho phép khôi phục an toàn |
+| `GET/POST/PATCH` | `/internal/customer-requests[/{id}]` | Manager gửi/xem yêu cầu khóa; Admin duyệt hoặc từ chối |
 | `GET` | `/internal/reports/customers` | Báo cáo khách hàng |
 | `GET/PATCH` | `/internal/feedback[/{id}]` | Danh sách/xử lý phản hồi |
 | `GET/POST` | `/internal/surveys` | Danh sách/phát hành khảo sát |
@@ -52,4 +50,4 @@ Các phiên đăng nhập dùng Bearer token có hạn 8 giờ; ID tài khoản 
 | `GET` | `/internal/surveys/{id}/results` | Thống kê kết quả |
 | `GET` | `/internal/accounts`, `/internal/catalogs` | Tài khoản nội bộ/danh mục |
 
-API chỉ cho phép CORS từ các origin được liệt kê trong `FRONTEND_ORIGINS`. Mỗi endpoint quản trị kiểm tra vai trò phía máy chủ; thao tác duyệt yêu cầu, cập nhật trạng thái khách hàng và xóa khách hàng dùng các hàm nghiệp vụ đã định nghĩa trong PostgreSQL.
+API chỉ cho phép CORS từ các origin được liệt kê trong `FRONTEND_ORIGINS`. Mỗi endpoint quản trị kiểm tra vai trò phía máy chủ; thao tác duyệt yêu cầu và cập nhật trạng thái khách hàng dùng các hàm nghiệp vụ đã định nghĩa trong PostgreSQL. Không còn endpoint xóa khách hàng hoặc Audit Log/Rollback.

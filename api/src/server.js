@@ -347,80 +347,6 @@ async function listCustomers() {
   return rows;
 }
 
-async function customerSnapshot(client, customerId, lock = false) {
-  const { rows } = await client.query(
-    `SELECT jsonb_build_object(
-       'id', t.id, 'username', t.ten_dang_nhap, 'status', t.trang_thai,
-       'code', h.ma_thanh_vien, 'name', h.ho_ten, 'birthYear', h.nam_sinh,
-       'gender', h.gioi_tinh, 'preferenceId', h.so_thich_id
-     ) AS snapshot
-       FROM tai_khoan t JOIN khach_hang h ON h.tai_khoan_id = t.id
-      WHERE t.id = $1 AND t.vai_tro = 'customer' ${lock ? "FOR UPDATE OF t, h" : ""}`,
-    [customerId]
-  );
-  return rows[0]?.snapshot || null;
-}
-
-async function customerRestoreSnapshot(client, customerId) {
-  const { rows: accountRows } = await client.query(
-    `SELECT to_jsonb(t) AS row FROM tai_khoan t WHERE t.id = $1 AND t.vai_tro = 'customer'`,
-    [customerId]
-  );
-  const { rows: customerRows } = await client.query(
-    `SELECT to_jsonb(h) AS row FROM khach_hang h WHERE h.tai_khoan_id = $1`,
-    [customerId]
-  );
-  const feedback = await client.query(
-    `SELECT COALESCE(jsonb_agg(to_jsonb(p) ORDER BY p.id), '[]'::jsonb) AS rows
-       FROM phan_hoi p WHERE p.khach_hang_id = $1`,
-    [customerId]
-  );
-  const distributions = await client.query(
-    `SELECT COALESCE(jsonb_agg(to_jsonb(p) ORDER BY p.khao_sat_id), '[]'::jsonb) AS rows
-       FROM phan_phoi_khao_sat p WHERE p.khach_hang_id = $1`,
-    [customerId]
-  );
-  const answers = await client.query(
-    `SELECT COALESCE(jsonb_agg(to_jsonb(c) ORDER BY c.khao_sat_id, c.cau_hoi_id), '[]'::jsonb) AS rows
-       FROM cau_tra_loi c WHERE c.khach_hang_id = $1`,
-    [customerId]
-  );
-  const notifications = await client.query(
-    `SELECT COALESCE(jsonb_agg(to_jsonb(n) ORDER BY n.id), '[]'::jsonb) AS rows
-       FROM thong_bao n WHERE n.tai_khoan_id = $1`,
-    [customerId]
-  );
-  const requests = await client.query(
-    `SELECT COALESCE(jsonb_agg(r.id ORDER BY r.id), '[]'::jsonb) AS ids
-       FROM yeu_cau_admin_khach_hang r WHERE r.khach_hang_id = $1`,
-    [customerId]
-  );
-  if (!accountRows[0] || !customerRows[0]) throw new HttpError(404, "Không tìm thấy hồ sơ khách hàng");
-  return {
-    account: accountRows[0].row,
-    customer: customerRows[0].row,
-    feedback: feedback.rows[0].rows,
-    distributions: distributions.rows[0].rows,
-    answers: answers.rows[0].rows,
-    notifications: notifications.rows[0].rows,
-    requestIds: requests.rows[0].ids
-  };
-}
-
-async function recordCustomerAudit(client, actorId, customerId, action, before, after, restoreData = null) {
-  await client.query(
-    `INSERT INTO nhat_ky_khach_hang(
-       nguoi_thuc_hien_id, khach_hang_id, hanh_dong, du_lieu_truoc, du_lieu_sau, du_lieu_khoi_phuc
-     ) VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb)`,
-    [
-      actorId, customerId, action,
-      before == null ? null : JSON.stringify(before),
-      after == null ? null : JSON.stringify(after),
-      restoreData == null ? null : JSON.stringify(restoreData)
-    ]
-  );
-}
-
 async function getSurveyQuestions(client, surveyId) {
   const { rows } = await client.query(
     `SELECT c.id, c.noi_dung AS content, c.thu_tu AS ordering, c.bat_buoc AS required,
@@ -488,10 +414,7 @@ async function internalRoutes(request, response, method, path, body) {
     if (session.role !== "manager") throw new HttpError(403, "Chỉ Manager mới được thêm khách hàng");
     const id = await transaction(async client => {
       await client.query("SELECT crm_kiem_tra_quyen($1, ARRAY['manager']::vai_tro[])", [session.id]);
-      const customerId = await createCustomerAccount(client, body, session.id);
-      const after = await customerSnapshot(client, customerId);
-      await recordCustomerAudit(client, session.id, customerId, "create", null, after);
-      return customerId;
+      return createCustomerAccount(client, body, session.id);
     });
     json(response, 201, { id });
     return true;
@@ -507,8 +430,12 @@ async function internalRoutes(request, response, method, path, body) {
     if (!["nam", "nu", "khac", "khong_cung_cap"].includes(gender)) throw new HttpError(400, "Giới tính không hợp lệ");
     await transaction(async client => {
       await client.query("SELECT crm_kiem_tra_quyen($1, ARRAY['manager']::vai_tro[])", [session.id]);
-      const before = await customerSnapshot(client, customerId, true);
-      if (!before) throw new HttpError(404, "Không tìm thấy hồ sơ khách hàng");
+      const customer = await client.query(
+        `SELECT t.id FROM tai_khoan t JOIN khach_hang h ON h.tai_khoan_id = t.id
+          WHERE t.id = $1 AND t.vai_tro = 'customer' FOR UPDATE OF t, h`,
+        [customerId]
+      );
+      if (!customer.rowCount) throw new HttpError(404, "Không tìm thấy hồ sơ khách hàng");
       const preference = await client.query("SELECT id FROM nhom_so_thich WHERE id = $1 AND dang_su_dung", [preferenceId]);
       if (!preference.rowCount) throw new HttpError(400, "Sở thích không tồn tại hoặc đã ngừng sử dụng");
       await client.query(
@@ -516,8 +443,6 @@ async function internalRoutes(request, response, method, path, body) {
           WHERE tai_khoan_id = $1`,
         [customerId, fullName, birthYear, gender, preferenceId]
       );
-      const after = await customerSnapshot(client, customerId);
-      await recordCustomerAudit(client, session.id, customerId, "update", before, after);
     });
     json(response, 200, { message: "Đã cập nhật hồ sơ khách hàng" });
     return true;
@@ -531,20 +456,6 @@ async function internalRoutes(request, response, method, path, body) {
       session.id, requireInteger(customerStatus[1], "Mã khách hàng"), status
     ]);
     json(response, 200, { message: "Đã cập nhật trạng thái khách hàng" });
-    return true;
-  }
-  const customerDelete = path.match(/^\/internal\/customers\/(\d+)$/);
-  if (method === "DELETE" && customerDelete) {
-    if (session.role !== "admin") throw new HttpError(403, "Manager cần gửi yêu cầu Admin để xóa khách hàng");
-    const customerId = requireInteger(customerDelete[1], "Mã khách hàng");
-    await transaction(async client => {
-      await client.query("SELECT crm_kiem_tra_quyen($1, ARRAY['admin']::vai_tro[])", [session.id]);
-      const before = await customerSnapshot(client, customerId, true);
-      if (!before) throw new HttpError(404, "Không tìm thấy khách hàng");
-      await client.query("SELECT crm_xoa_khach_hang($1, $2)", [session.id, customerId]);
-      await recordCustomerAudit(client, session.id, customerId, "delete", before, null);
-    });
-    json(response, 200, { message: "Đã xóa khách hàng" });
     return true;
   }
   if (method === "GET" && path === "/internal/reports/customers") {
@@ -826,7 +737,8 @@ async function internalRoutes(request, response, method, path, body) {
            JOIN tai_khoan a ON a.id = r.nguoi_yeu_cau_id
            LEFT JOIN nhan_vien_noi_bo n ON n.tai_khoan_id = a.id
            LEFT JOIN khach_hang h ON h.tai_khoan_id = r.khach_hang_id
-          ORDER BY (r.trang_thai = 'pending') DESC, r.ngay_tao DESC`
+           WHERE r.loai = 'lock_customer'
+           ORDER BY (r.trang_thai = 'pending') DESC, r.ngay_tao DESC`
       )
       : await pool.query(
         `SELECT r.id, r.khach_hang_id AS "customerId", r.loai AS action, r.ly_do AS reason,
@@ -835,17 +747,16 @@ async function internalRoutes(request, response, method, path, body) {
                 r.ngay_quyet_dinh AS "decidedAt"
            FROM yeu_cau_admin_khach_hang r
            LEFT JOIN khach_hang h ON h.tai_khoan_id = r.khach_hang_id
-          WHERE r.nguoi_yeu_cau_id = $1 ORDER BY r.ngay_tao DESC`,
+          WHERE r.nguoi_yeu_cau_id = $1 AND r.loai = 'lock_customer' ORDER BY r.ngay_tao DESC`,
         [session.id]
       );
     json(response, 200, { requests: result.rows });
     return true;
   }
   if (method === "POST" && path === "/internal/customer-requests") {
-    if (session.role !== "manager") throw new HttpError(403, "Chỉ Manager mới được gửi yêu cầu khóa hoặc xóa khách hàng");
+    if (session.role !== "manager") throw new HttpError(403, "Chỉ Manager mới được gửi yêu cầu khóa khách hàng");
     const customerId = requireInteger(body.customerId, "Mã khách hàng");
-    const action = body.action ?? "lock_customer";
-    if (!["lock_customer", "delete_customer"].includes(action)) throw new HttpError(400, "Loại yêu cầu không hợp lệ");
+    if (body.action != null && body.action !== "lock_customer") throw new HttpError(400, "Loại yêu cầu không hợp lệ");
     const reason = requireValue(body.reason, "Lý do", { min: 5, max: 2000 });
     const rows = await transaction(async client => {
       await client.query("SELECT crm_kiem_tra_quyen($1, ARRAY['manager']::vai_tro[])", [session.id]);
@@ -856,30 +767,28 @@ async function internalRoutes(request, response, method, path, body) {
         [customerId]
       );
       if (!target.rowCount) throw new HttpError(404, "Không tìm thấy khách hàng");
-      if (action === "lock_customer" && target.rows[0].status !== "active") {
+      if (target.rows[0].status !== "active") {
         throw new HttpError(409, "Chỉ có thể yêu cầu khóa khách hàng đang hoạt động");
       }
       const existingRequest = await client.query(
         `SELECT id FROM yeu_cau_admin_khach_hang
-          WHERE khach_hang_id = $1 AND loai = $2 AND trang_thai = 'pending' LIMIT 1`,
-        [customerId, action]
+          WHERE khach_hang_id = $1 AND loai = 'lock_customer' AND trang_thai = 'pending' LIMIT 1`,
+        [customerId]
       );
       if (existingRequest.rowCount) {
-        throw new HttpError(409, action === "delete_customer"
-          ? "Đã có yêu cầu xóa đang chờ Admin xử lý"
-          : "Đã có yêu cầu khóa đang chờ Admin xử lý");
+        throw new HttpError(409, "Đã có yêu cầu khóa đang chờ Admin xử lý");
       }
       const result = await client.query(
         `INSERT INTO yeu_cau_admin_khach_hang(nguoi_yeu_cau_id, khach_hang_id, khach_hang_ten, loai, ly_do)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [session.id, customerId, target.rows[0].name, action, reason]
+         VALUES ($1, $2, $3, 'lock_customer', $4) RETURNING id`,
+        [session.id, customerId, target.rows[0].name, reason]
       );
       return result.rows;
     });
     if (!rows[0]) throw new HttpError(404, "Không tìm thấy khách hàng");
     json(response, 201, {
       id: rows[0].id,
-      message: action === "delete_customer" ? "Đã gửi yêu cầu xóa đến Admin" : "Đã gửi yêu cầu khóa đến Admin"
+      message: "Đã gửi yêu cầu khóa đến Admin"
     });
     return true;
   }
@@ -890,7 +799,7 @@ async function internalRoutes(request, response, method, path, body) {
     const status = body.status;
     if (!["approved", "rejected"].includes(status)) throw new HttpError(400, "Quyết định không hợp lệ");
     const note = body.note == null || body.note === "" ? null : requireValue(body.note, "Ghi chú", { min: 1, max: 2000 });
-    const action = await transaction(async client => {
+    await transaction(async client => {
       await client.query("SELECT crm_kiem_tra_quyen($1, ARRAY['admin']::vai_tro[])", [session.id]);
       const { rows: candidates } = await client.query(
         `SELECT id, khach_hang_id, loai, trang_thai
@@ -900,12 +809,7 @@ async function internalRoutes(request, response, method, path, body) {
       const candidate = candidates[0];
       if (!candidate) throw new HttpError(404, "Không tìm thấy yêu cầu");
       if (candidate.trang_thai !== "pending") throw new HttpError(409, "Yêu cầu này đã được xử lý");
-      if (!candidate.khach_hang_id && status === "approved") throw new HttpError(409, "Khách hàng đã bị xóa; không thể phê duyệt yêu cầu này");
-      let before = null;
-      if (status === "approved") {
-        before = await customerSnapshot(client, candidate.khach_hang_id, true);
-        if (!before) throw new HttpError(404, "Không tìm thấy khách hàng");
-      }
+      if (candidate.loai !== "lock_customer") throw new HttpError(409, "Loại yêu cầu này không còn được hỗ trợ");
       const { rows: lockedRequests } = await client.query(
         `SELECT id, khach_hang_id, loai, trang_thai
            FROM yeu_cau_admin_khach_hang WHERE id = $1 FOR UPDATE`,
@@ -918,15 +822,10 @@ async function internalRoutes(request, response, method, path, body) {
         throw new HttpError(409, "Yêu cầu đã thay đổi; vui lòng tải lại danh sách");
       }
       if (status === "approved") {
-        if (pending.loai === "lock_customer") {
-          await client.query(
-            "SELECT crm_dat_trang_thai_khach_hang($1, $2, 'locked'::trang_thai_tai_khoan)",
-            [session.id, pending.khach_hang_id]
-          );
-        } else {
-          await client.query("SELECT crm_xoa_khach_hang($1, $2)", [session.id, pending.khach_hang_id]);
-          await recordCustomerAudit(client, session.id, pending.khach_hang_id, "delete", before, null);
-        }
+        await client.query(
+          "SELECT crm_dat_trang_thai_khach_hang($1, $2, 'locked'::trang_thai_tai_khoan)",
+          [session.id, pending.khach_hang_id]
+        );
       }
       await client.query(
         `UPDATE yeu_cau_admin_khach_hang
@@ -935,119 +834,12 @@ async function internalRoutes(request, response, method, path, body) {
           WHERE id = $1`,
         [requestId, status, session.id, note]
       );
-      return pending.loai;
     });
     json(response, 200, {
       message: status === "rejected"
         ? "Đã từ chối yêu cầu"
-        : action === "delete_customer" ? "Đã phê duyệt và xóa khách hàng" : "Đã phê duyệt và khóa khách hàng"
+        : "Đã phê duyệt và khóa khách hàng"
     });
-    return true;
-  }
-  if (method === "GET" && path === "/internal/customer-audit") {
-    if (session.role !== "admin") throw new HttpError(403, "Chỉ Admin mới được xem nhật ký khách hàng");
-    const { rows } = await pool.query(
-      `SELECT l.id, l.khach_hang_id AS "customerId", l.hanh_dong AS action,
-              l.du_lieu_truoc AS "beforeData", l.du_lieu_sau AS "afterData",
-              l.ngay_tao AS "createdAt", l.rollback_at AS "rolledBackAt",
-              (l.hanh_dong IN ('create', 'update') OR l.du_lieu_khoi_phuc IS NOT NULL) AS "canRollback",
-              a.ten_dang_nhap AS "actorUsername", n.ho_ten AS "actorName"
-         FROM nhat_ky_khach_hang l
-         LEFT JOIN tai_khoan a ON a.id = l.nguoi_thuc_hien_id
-         LEFT JOIN nhan_vien_noi_bo n ON n.tai_khoan_id = l.nguoi_thuc_hien_id
-        ORDER BY l.ngay_tao DESC LIMIT 500`
-    );
-    json(response, 200, { entries: rows });
-    return true;
-  }
-  const auditRollback = path.match(/^\/internal\/customer-audit\/(\d+)\/rollback$/);
-  if (method === "POST" && auditRollback) {
-    if (session.role !== "admin") throw new HttpError(403, "Chỉ Admin mới được khôi phục dữ liệu");
-    const auditId = requireInteger(auditRollback[1], "Mã nhật ký");
-    await transaction(async client => {
-      await client.query("SELECT crm_kiem_tra_quyen($1, ARRAY['admin']::vai_tro[])", [session.id]);
-      const { rows } = await client.query(
-        `SELECT id, khach_hang_id, hanh_dong, du_lieu_truoc, du_lieu_sau,
-                du_lieu_khoi_phuc, rollback_at, nguoi_thuc_hien_id
-           FROM nhat_ky_khach_hang WHERE id = $1 FOR UPDATE`,
-        [auditId]
-      );
-      const entry = rows[0];
-      if (!entry) throw new HttpError(404, "Không tìm thấy nhật ký");
-      if (entry.rollback_at) throw new HttpError(409, "Thay đổi này đã được khôi phục");
-      if (!entry.nguoi_thuc_hien_id || (entry.hanh_dong === "delete" && !entry.du_lieu_khoi_phuc)) {
-        throw new HttpError(400, "Không thể khôi phục loại thay đổi này");
-      }
-      const current = await customerSnapshot(client, entry.khach_hang_id, entry.hanh_dong !== "delete");
-      if (entry.hanh_dong === "delete") {
-        if (current) throw new HttpError(409, "Tài khoản khách hàng đã tồn tại; không thể khôi phục an toàn");
-        const snapshot = entry.du_lieu_khoi_phuc;
-        const accountForRestore = {
-          ...snapshot.account,
-          trang_thai: "active"
-        };
-        await client.query(
-          `INSERT INTO tai_khoan SELECT * FROM jsonb_populate_record(NULL::tai_khoan, $1::jsonb)`,
-          [JSON.stringify(accountForRestore)]
-        );
-        await client.query(
-          `INSERT INTO khach_hang SELECT * FROM jsonb_populate_record(NULL::khach_hang, $1::jsonb)`,
-          [JSON.stringify(snapshot.customer)]
-        );
-        for (const [table, records] of [
-          ["phan_hoi", snapshot.feedback],
-          ["phan_phoi_khao_sat", snapshot.distributions],
-          ["cau_tra_loi", snapshot.answers],
-          ["thong_bao", snapshot.notifications]
-        ]) {
-          await client.query(
-            `INSERT INTO ${table} SELECT * FROM jsonb_populate_recordset(NULL::${table}, $1::jsonb)`,
-            [JSON.stringify(records)]
-          );
-        }
-        await client.query(
-          `UPDATE yeu_cau_admin_khach_hang SET khach_hang_id = $1
-            WHERE id = ANY($2::bigint[]) AND khach_hang_id IS NULL`,
-          [entry.khach_hang_id, snapshot.requestIds]
-        );
-        if (snapshot.account.trang_thai !== "active") {
-          await client.query(
-            `UPDATE tai_khoan SET trang_thai = $2::trang_thai_tai_khoan WHERE id = $1`,
-            [entry.khach_hang_id, snapshot.account.trang_thai]
-          );
-        }
-      } else {
-        if (!current || JSON.stringify(current) !== JSON.stringify(entry.du_lieu_sau)) {
-          throw new HttpError(409, "Dữ liệu khách hàng đã thay đổi sau nhật ký này; không thể rollback an toàn");
-        }
-        if (entry.hanh_dong === "create") {
-          const activity = await client.query(
-            `SELECT
-               EXISTS(SELECT 1 FROM phan_hoi WHERE khach_hang_id = $1) OR
-               EXISTS(SELECT 1 FROM phan_phoi_khao_sat WHERE khach_hang_id = $1) OR
-               EXISTS(SELECT 1 FROM thong_bao WHERE tai_khoan_id = $1) AS has_activity`,
-            [entry.khach_hang_id]
-          );
-          if (activity.rows[0].has_activity) {
-            throw new HttpError(409, "Khách hàng đã có hoạt động phát sinh; không thể hoàn tác thao tác thêm an toàn");
-          }
-          await client.query("SELECT crm_xoa_khach_hang($1, $2)", [session.id, entry.khach_hang_id]);
-        } else {
-          const previous = entry.du_lieu_truoc;
-          await client.query(
-            `UPDATE khach_hang
-                SET ho_ten = $2, nam_sinh = $3, gioi_tinh = $4::gioi_tinh, so_thich_id = $5
-              WHERE tai_khoan_id = $1`,
-            [entry.khach_hang_id, previous.name, previous.birthYear, previous.gender, previous.preferenceId]
-          );
-        }
-      }
-      await client.query(
-        `UPDATE nhat_ky_khach_hang SET rollback_at = clock_timestamp(), rollback_by = $2 WHERE id = $1`,
-        [auditId, session.id]
-      );
-    });
-    json(response, 200, { message: "Đã khôi phục dữ liệu khách hàng" });
     return true;
   }
   if (method === "GET" && path === "/internal/accounts") {

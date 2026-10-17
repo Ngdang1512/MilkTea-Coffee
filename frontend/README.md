@@ -7,10 +7,10 @@ cd C:\xampp\htdocs\MilkTea-Coffee\frontend
 npm run dev
 ```
 
-Mở cổng `4173` theo từng khu vực:
+`npm run dev` mở ba cổng, mỗi cổng dành riêng cho một khu vực:
 
-- Admin: http://127.0.0.1:4173/admin
-- Manager: http://127.0.0.1:4173/manager
-- Customer: http://127.0.0.1:4173/customer
+- Admin: http://127.0.0.1:4173/
+- Manager: http://127.0.0.1:4174/
+- Customer: http://127.0.0.1:4175/
 
-API base URL mặc định là `http://127.0.0.1:3000`. Nếu đổi cổng hoặc host, cần cập nhật `frontend/configs/app-config.js` và `FRONTEND_ORIGINS` trong `api/.env` cho khớp.
+API base URL mặc định là `http://127.0.0.1:3000`. Nếu đổi cổng hoặc host, cần cập nhật `FRONTEND_ORIGINS` trong `api/.env` cho khớp.
