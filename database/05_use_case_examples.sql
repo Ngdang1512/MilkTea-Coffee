@@ -59,11 +59,9 @@ VALUES (8,1,5,'Trân châu mềm, mức ngọt vừa phải.');
 -- D. Tiếp nhận phản hồi.
 SELECT crm_xu_ly_phan_hoi(2,1,'da_tiep_thu');
 
--- E. Khóa / mở khóa và xóa khách hàng (xóa trực tiếp chỉ dành cho Admin).
+-- E. Khóa / mở khóa tài khoản khách hàng.
 SELECT crm_dat_trang_thai_khach_hang(2,8,'locked');
 SELECT crm_dat_trang_thai_khach_hang(2,8,'active');
--- Xóa cứng có mất lịch sử của khách này: màn hình phải có xác nhận.
-SELECT crm_xoa_khach_hang(1,8);
 
 -- F. Phát hành khảo sát 3 đến nhóm cụ thể.
 SELECT crm_phat_hanh_khao_sat(2,3,ARRAY[4,5,8]::bigint[]);
