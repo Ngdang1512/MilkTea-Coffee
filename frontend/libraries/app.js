@@ -899,7 +899,8 @@ function switchRole(role) {
   internalSession.account = null;
   internalSession.dashboard = null;
   internalSession.loaded.clear();
-  location.assign(`${location.origin}/${role}`);
+  const routes = { admin: "http://127.0.0.1:4173/", manager: "http://127.0.0.1:4174/", customer: "http://127.0.0.1:4175/" };
+  location.assign(routes[role]);
 }
 
 async function initializeRole(role) {

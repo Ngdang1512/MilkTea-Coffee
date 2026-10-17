@@ -1,7 +1,7 @@
 import { APP_CONFIG } from "../configs/app-config.js";
 
 const TOKEN_KEY = "milktea-customer-token";
-const internalPortal = location.pathname === "/admin" || location.pathname.startsWith("/admin/") ? "admin" : "manager";
+const internalPortal = location.port === "4173" || location.pathname === "/admin" || location.pathname.startsWith("/admin/") ? "admin" : "manager";
 const INTERNAL_TOKEN_KEY = `milktea-${internalPortal}-token`;
 
 async function request(path, options = {}) {
