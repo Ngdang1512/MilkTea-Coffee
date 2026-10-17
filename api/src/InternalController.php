@@ -34,9 +34,6 @@ final class InternalController
         if ($method === 'PATCH' && preg_match('#^/internal/customers/(\d+)/status$#', $path, $matches)) {
             $this->updateCustomerStatus((int) $account['id'], (int) $matches[1], Http::body());
         }
-        if ($method === 'DELETE' && preg_match('#^/internal/customers/(\d+)$#', $path, $matches)) {
-            $this->deleteCustomer((int) $matches[1], (int) $account['id']);
-        }
         if ($method === 'GET' && $path === '/internal/reports/customers') {
             Http::json(200, $this->customerReports());
         }
@@ -67,6 +64,31 @@ final class InternalController
         if ($method === 'GET' && $path === '/internal/accounts') {
             $this->requireAdmin($account);
             Http::json(200, ['accounts' => $this->accounts()]);
+        }
+        if ($method === 'PATCH' && preg_match('#^/internal/customers/(\d+)$#', $path, $matches)) {
+            $this->updateCustomerProfile((int) $account['id'], (int) $matches[1], Http::body(), $account['role']);
+        }
+        if ($method === 'GET' && $path === '/internal/customer-requests') {
+            Http::json(200, ['requests' => $this->customerRequests($account)]);
+        }
+        if ($method === 'POST' && $path === '/internal/customer-requests') {
+            $this->createCustomerRequest((int) $account['id'], Http::body(), $account['role']);
+        }
+        if ($method === 'PATCH' && preg_match('#^/internal/customer-requests/(\d+)$#', $path, $matches)) {
+            $this->requireAdmin($account);
+            $this->decideCustomerRequest((int) $account['id'], (int) $matches[1], Http::body());
+        }
+        if ($method === 'GET' && $path === '/internal/managers') {
+            $this->requireAdmin($account);
+            Http::json(200, ['managers' => $this->managers()]);
+        }
+        if ($method === 'POST' && $path === '/internal/managers') {
+            $this->requireAdmin($account);
+            $this->createManager((int) $account['id'], Http::body());
+        }
+        if ($method === 'PATCH' && preg_match('#^/internal/managers/(\d+)$#', $path, $matches)) {
+            $this->requireAdmin($account);
+            $this->updateManager((int) $matches[1], Http::body());
         }
         if ($method === 'GET' && $path === '/internal/catalogs') {
             Http::json(200, $this->catalogs());
@@ -227,13 +249,6 @@ final class InternalController
             'status' => $status,
         ]);
         Http::json(200, ['customer' => $this->customerById($customerId)]);
-    }
-
-    private function deleteCustomer(int $customerId, int $accountId): never
-    {
-        $statement = $this->db->prepare('SELECT crm_xoa_khach_hang(:account,:customer)');
-        $statement->execute(['account' => $accountId, 'customer' => $customerId]);
-        Http::json(200, ['message' => 'Đã xóa khách hàng']);
     }
 
     private function customerById(int $customerId): array
@@ -597,5 +612,270 @@ final class InternalController
             'drinks' => $this->db->query('SELECT id,ma_do_uong AS code,ten_do_uong AS name,mo_ta AS description,dang_kinh_doanh AS active FROM do_uong ORDER BY id')->fetchAll(),
             'preferences' => $this->db->query('SELECT id,ten_nhom AS name,mo_ta AS description,dang_su_dung AS active FROM nhom_so_thich ORDER BY id')->fetchAll(),
         ];
+    }
+
+    private function updateCustomerProfile(int $accountId, int $customerId, array $body, string $role): never
+    {
+        Http::require($role === 'manager', 'Chỉ Manager mới được cập nhật hồ sơ khách hàng', 'FORBIDDEN');
+        $name = trim((string) ($body['hoTen'] ?? ''));
+        $birthYear = filter_var($body['namSinh'] ?? null, FILTER_VALIDATE_INT);
+        $gender = (string) ($body['gioiTinh'] ?? 'khong_cung_cap');
+        $preferenceId = filter_var($body['soThichId'] ?? null, FILTER_VALIDATE_INT);
+
+        Http::require(mb_strlen($name) >= 2 && mb_strlen($name) <= 150, 'Họ tên phải có từ 2 đến 150 ký tự');
+        Http::require($birthYear !== false && $birthYear >= 1900 && $birthYear <= (int) date('Y'), 'Năm sinh không hợp lệ');
+        Http::require(in_array($gender, ['nam', 'nu', 'khac', 'khong_cung_cap'], true), 'Giới tính không hợp lệ');
+        Http::require($preferenceId !== false && $preferenceId > 0, 'Vui lòng chọn nhóm sở thích');
+
+        $this->db->beginTransaction();
+        try {
+            $perm = $this->db->prepare("SELECT crm_kiem_tra_quyen(:account, ARRAY['manager']::vai_tro[])");
+            $perm->execute(['account' => $accountId]);
+
+            $prefCheck = $this->db->prepare("SELECT 1 FROM nhom_so_thich WHERE id = :id AND dang_su_dung");
+            $prefCheck->execute(['id' => $preferenceId]);
+            Http::require((bool) $prefCheck->fetchColumn(), 'Sở thích không tồn tại hoặc đã ngừng sử dụng');
+
+            $update = $this->db->prepare(<<<'SQL'
+                UPDATE khach_hang
+                   SET ho_ten = :name, nam_sinh = :birthYear, gioi_tinh = CAST(:gender AS gioi_tinh),
+                       so_thich_id = :preferenceId, ngay_cap_nhat = clock_timestamp()
+                 WHERE tai_khoan_id = :customerId
+            SQL);
+            $update->execute([
+                'name' => $name,
+                'birthYear' => $birthYear,
+                'gender' => $gender,
+                'preferenceId' => $preferenceId,
+                'customerId' => $customerId,
+            ]);
+            Http::require($update->rowCount() > 0, 'Không tìm thấy hồ sơ khách hàng', 'CUSTOMER_NOT_FOUND');
+            $this->db->commit();
+        } catch (\Throwable $error) {
+            $this->db->rollBack();
+            throw $error;
+        }
+
+        Http::json(200, ['message' => 'Đã cập nhật hồ sơ khách hàng', 'customer' => $this->customerById($customerId)]);
+    }
+
+    private function customerRequests(array $account): array
+    {
+        if ($account['role'] === 'admin') {
+            return $this->db->query(<<<'SQL'
+                SELECT r.id, r.khach_hang_id AS "customerId", r.loai AS action, r.ly_do AS reason,
+                       r.trang_thai AS status, r.ngay_tao AS "createdAt",
+                       a.ten_dang_nhap AS "requesterUsername", n.ho_ten AS "requesterName",
+                       COALESCE(h.ho_ten, r.khach_hang_ten) AS "customerName", r.ghi_chu_quyet_dinh AS "decisionNote",
+                       r.ngay_quyet_dinh AS "decidedAt"
+                  FROM yeu_cau_admin_khach_hang r
+                  JOIN tai_khoan a ON a.id = r.nguoi_yeu_cau_id
+                  LEFT JOIN nhan_vien_noi_bo n ON n.tai_khoan_id = a.id
+                  LEFT JOIN khach_hang h ON h.tai_khoan_id = r.khach_hang_id
+                 WHERE r.loai IN ('lock_customer', 'unlock_customer')
+                 ORDER BY (r.trang_thai = 'pending') DESC, r.ngay_tao DESC
+            SQL)->fetchAll();
+        }
+
+        $stmt = $this->db->prepare(<<<'SQL'
+            SELECT r.id, r.khach_hang_id AS "customerId", r.loai AS action, r.ly_do AS reason,
+                   r.trang_thai AS status, r.ngay_tao AS "createdAt",
+                   COALESCE(h.ho_ten, r.khach_hang_ten) AS "customerName", r.ghi_chu_quyet_dinh AS "decisionNote",
+                   r.ngay_quyet_dinh AS "decidedAt"
+              FROM yeu_cau_admin_khach_hang r
+              LEFT JOIN khach_hang h ON h.tai_khoan_id = r.khach_hang_id
+             WHERE r.nguoi_yeu_cau_id = :managerId AND r.loai IN ('lock_customer', 'unlock_customer')
+             ORDER BY r.ngay_tao DESC
+        SQL);
+        $stmt->execute(['managerId' => (int) $account['id']]);
+        return $stmt->fetchAll();
+    }
+
+    private function createCustomerRequest(int $managerId, array $body, string $role): never
+    {
+        Http::require($role === 'manager', 'Chỉ Manager mới được gửi yêu cầu lên Admin', 'FORBIDDEN');
+        $customerId = filter_var($body['customerId'] ?? null, FILTER_VALIDATE_INT);
+        Http::require($customerId !== false && $customerId > 0, 'Mã khách hàng không hợp lệ');
+        $action = (string) ($body['action'] ?? 'lock_customer');
+        Http::require(in_array($action, ['lock_customer', 'unlock_customer'], true), 'Loại yêu cầu không hợp lệ');
+        $isUnlock = $action === 'unlock_customer';
+        $reason = trim((string) ($body['reason'] ?? ''));
+        Http::require(mb_strlen($reason) >= 5 && mb_strlen($reason) <= 2000, 'Lý do yêu cầu phải có từ 5 đến 2000 ký tự');
+
+        $this->db->beginTransaction();
+        try {
+            $perm = $this->db->prepare("SELECT crm_kiem_tra_quyen(:account, ARRAY['manager']::vai_tro[])");
+            $perm->execute(['account' => $managerId]);
+
+            $checkCust = $this->db->prepare("SELECT t.id, t.trang_thai, h.ho_ten FROM tai_khoan t JOIN khach_hang h ON h.tai_khoan_id = t.id WHERE t.id = :id AND t.vai_tro = 'customer'");
+            $checkCust->execute(['id' => $customerId]);
+            $target = $checkCust->fetch();
+            Http::require((bool) $target, 'Không tìm thấy khách hàng', 'CUSTOMER_NOT_FOUND');
+
+            if ($isUnlock) {
+                Http::require($target['trang_thai'] === 'locked', 'Chỉ có thể yêu cầu mở khóa khách hàng đang bị khóa');
+            } else {
+                Http::require($target['trang_thai'] === 'active', 'Chỉ có thể yêu cầu khóa khách hàng đang hoạt động');
+            }
+
+            $existing = $this->db->prepare("SELECT 1 FROM yeu_cau_admin_khach_hang WHERE khach_hang_id = :id AND loai = :act AND trang_thai = 'pending'");
+            $existing->execute(['id' => $customerId, 'act' => $action]);
+            Http::require(!(bool) $existing->fetchColumn(), $isUnlock ? 'Đã có yêu cầu mở khóa đang chờ Admin xử lý' : 'Đã có yêu cầu khóa đang chờ Admin xử lý');
+
+            $insert = $this->db->prepare(<<<'SQL'
+                INSERT INTO yeu_cau_admin_khach_hang(nguoi_yeu_cau_id, khach_hang_id, khach_hang_ten, loai, ly_do)
+                VALUES (:requester, :customer, :custName, :action, :reason)
+                RETURNING id
+            SQL);
+            $insert->execute([
+                'requester' => $managerId,
+                'customer' => $customerId,
+                'custName' => $target['ho_ten'],
+                'action' => $action,
+                'reason' => $reason,
+            ]);
+            $requestId = (int) $insert->fetchColumn();
+            $this->db->commit();
+        } catch (\Throwable $error) {
+            $this->db->rollBack();
+            throw $error;
+        }
+
+        Http::json(201, [
+            'id' => $requestId,
+            'message' => $isUnlock ? 'Đã gửi đề xuất mở khóa lên Admin thành công' : 'Đã gửi đề xuất khóa lên Admin thành công'
+        ]);
+    }
+
+    private function decideCustomerRequest(int $adminId, int $requestId, array $body): never
+    {
+        $status = (string) ($body['status'] ?? '');
+        Http::require(in_array($status, ['approved', 'rejected'], true), 'Quyết định không hợp lệ');
+        $note = trim((string) ($body['note'] ?? ''));
+
+        $this->db->beginTransaction();
+        try {
+            $perm = $this->db->prepare("SELECT crm_kiem_tra_quyen(:account, ARRAY['admin']::vai_tro[])");
+            $perm->execute(['account' => $adminId]);
+
+            $stmt = $this->db->prepare("SELECT id, khach_hang_id, loai, trang_thai FROM yeu_cau_admin_khach_hang WHERE id = :id FOR UPDATE");
+            $stmt->execute(['id' => $requestId]);
+            $req = $stmt->fetch();
+            Http::require((bool) $req, 'Không tìm thấy yêu cầu');
+            Http::require($req['trang_thai'] === 'pending', 'Yêu cầu này đã được xử lý');
+            Http::require(in_array($req['loai'], ['lock_customer', 'unlock_customer'], true), 'Loại yêu cầu này không còn được hỗ trợ');
+
+            if ($status === 'approved') {
+                $targetStatus = $req['loai'] === 'unlock_customer' ? 'active' : 'locked';
+                $lock = $this->db->prepare("SELECT crm_dat_trang_thai_khach_hang(:admin, :cust, CAST(:st AS trang_thai_tai_khoan))");
+                $lock->execute(['admin' => $adminId, 'cust' => $req['khach_hang_id'], 'st' => $targetStatus]);
+            }
+
+            $upd = $this->db->prepare(<<<'SQL'
+                UPDATE yeu_cau_admin_khach_hang
+                   SET trang_thai = :status, nguoi_quyet_dinh_id = :admin,
+                       ghi_chu_quyet_dinh = :note, ngay_quyet_dinh = clock_timestamp()
+                 WHERE id = :id
+            SQL);
+            $upd->execute([
+                'status' => $status,
+                'admin' => $adminId,
+                'note' => $note ?: null,
+                'id' => $requestId,
+            ]);
+            $this->db->commit();
+        } catch (\Throwable $error) {
+            $this->db->rollBack();
+            throw $error;
+        }
+
+        $msg = $status === 'rejected'
+            ? 'Đã từ chối yêu cầu'
+            : ($req['loai'] === 'unlock_customer' ? 'Đã phê duyệt và mở khóa khách hàng' : 'Đã phê duyệt và khóa khách hàng');
+
+        Http::json(200, ['message' => $msg]);
+    }
+
+    private function managers(): array
+    {
+        return $this->db->query(<<<'SQL'
+            SELECT t.id, t.ten_dang_nhap AS username, t.trang_thai AS status,
+                   t.ngay_tao AS "createdAt", n.ho_ten AS "fullName",
+                   n.chuc_vu AS "jobTitle", n.bo_phan AS department
+              FROM tai_khoan t LEFT JOIN nhan_vien_noi_bo n ON n.tai_khoan_id = t.id
+             WHERE t.vai_tro = 'manager' ORDER BY t.ngay_tao DESC
+        SQL)->fetchAll();
+    }
+
+    private function createManager(int $adminId, array $body): never
+    {
+        $username = trim((string) ($body['tenDangNhap'] ?? ''));
+        $password = (string) ($body['matKhau'] ?? '');
+        $fullName = trim((string) ($body['hoTen'] ?? ''));
+        $jobTitle = trim((string) ($body['chucVu'] ?? ''));
+        $department = trim((string) ($body['boPhan'] ?? ''));
+
+        Http::require((bool) preg_match('/^[a-zA-Z0-9._-]{3,100}$/', $username), 'Tên đăng nhập không hợp lệ');
+        Http::require(strlen($password) >= 8 && strlen($password) <= 128, 'Mật khẩu phải từ 8 đến 128 ký tự');
+        Http::require(mb_strlen($fullName) >= 2 && mb_strlen($fullName) <= 150, 'Họ tên không hợp lệ');
+        Http::require(mb_strlen($jobTitle) >= 2 && mb_strlen($jobTitle) <= 150, 'Chức vụ không hợp lệ');
+
+        $this->db->beginTransaction();
+        try {
+            $perm = $this->db->prepare("SELECT crm_kiem_tra_quyen(:account, ARRAY['admin']::vai_tro[])");
+            $perm->execute(['account' => $adminId]);
+
+            $insTk = $this->db->prepare("INSERT INTO tai_khoan(ten_dang_nhap, mat_khau_hash, vai_tro, nguoi_tao_id) VALUES (:u, :p, 'manager', :creator) RETURNING id");
+            $insTk->execute(['u' => strtolower($username), 'p' => Auth::hashPassword($password), 'creator' => $adminId]);
+            $mgrId = (int) $insTk->fetchColumn();
+
+            $insNv = $this->db->prepare("INSERT INTO nhan_vien_noi_bo(tai_khoan_id, ho_ten, chuc_vu, bo_phan) VALUES (:id, :name, :job, :dept)");
+            $insNv->execute(['id' => $mgrId, 'name' => $fullName, 'job' => $jobTitle, 'dept' => $department]);
+
+            $this->db->commit();
+        } catch (\Throwable $error) {
+            $this->db->rollBack();
+            throw $error;
+        }
+
+        Http::json(201, ['id' => $mgrId, 'message' => 'Đã tạo tài khoản Manager']);
+    }
+
+    private function updateManager(int $managerId, array $body): never
+    {
+        $fullName = trim((string) ($body['hoTen'] ?? ''));
+        $jobTitle = trim((string) ($body['chucVu'] ?? ''));
+        $department = trim((string) ($body['boPhan'] ?? ''));
+        $status = isset($body['status']) ? (string) $body['status'] : null;
+
+        Http::require(mb_strlen($fullName) >= 2 && mb_strlen($fullName) <= 150, 'Họ tên không hợp lệ');
+        Http::require(mb_strlen($jobTitle) >= 2 && mb_strlen($jobTitle) <= 150, 'Chức vụ không hợp lệ');
+        if ($status !== null) {
+            Http::require(in_array($status, ['active', 'locked'], true), 'Trạng thái không hợp lệ');
+        }
+
+        $this->db->beginTransaction();
+        try {
+            if ($status !== null) {
+                $updTk = $this->db->prepare("UPDATE tai_khoan SET trang_thai = CAST(:st AS trang_thai_tai_khoan) WHERE id = :id AND vai_tro = 'manager'");
+                $updTk->execute(['st' => $status, 'id' => $managerId]);
+            }
+
+            $updNv = $this->db->prepare(<<<'SQL'
+                INSERT INTO nhan_vien_noi_bo(tai_khoan_id, ho_ten, chuc_vu, bo_phan)
+                VALUES (:id, :name, :job, :dept)
+                ON CONFLICT (tai_khoan_id) DO UPDATE
+                   SET ho_ten = EXCLUDED.ho_ten, chuc_vu = EXCLUDED.chuc_vu,
+                       bo_phan = EXCLUDED.bo_phan, ngay_cap_nhat = clock_timestamp()
+            SQL);
+            $updNv->execute(['id' => $managerId, 'name' => $fullName, 'job' => $jobTitle, 'dept' => $department]);
+
+            $this->db->commit();
+        } catch (\Throwable $error) {
+            $this->db->rollBack();
+            throw $error;
+        }
+
+        Http::json(200, ['message' => 'Đã cập nhật thông tin Manager']);
     }
 }
