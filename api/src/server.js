@@ -94,6 +94,7 @@ function mapDatabaseError(error) {
   if (error.code === "ECONNREFUSED" || error.code === "ETIMEDOUT") {
     return new HttpError(503, "Không kết nối được PostgreSQL. Kiểm tra dịch vụ PostgreSQL, host và cổng trong api/.env.");
   }
+  if (error.code === "23505" && error.constraint === "do_uong_ma_do_uong_key") return new HttpError(409, "Mã đồ uống đã tồn tại");
   if (error.code === "23505") return new HttpError(409, "Tên đăng nhập, mã thành viên hoặc dữ liệu này đã tồn tại");
   if (["23503", "23514", "22P02", "22007", "22008", "22003"].includes(error.code)) {
     return new HttpError(400, "Dữ liệu không hợp lệ hoặc vi phạm quy tắc nghiệp vụ");
@@ -254,7 +255,7 @@ async function customerRoutes(request, response, method, path, body) {
     const customer = await requireCustomer(request);
     const drinkId = requireInteger(body.doUongId, "Đồ uống");
     const rating = requireInteger(body.soSao, "Số sao", 1, 5);
-    const content = requireValue(body.noiDung, "Nội dung phản hồi", { max: 5000 });
+    const content = requireValue(body.noiDung, "Nội dung phản hồi", { min: 10, max: 5000 });
     const { rows } = await pool.query(
       `INSERT INTO phan_hoi(khach_hang_id, do_uong_id, so_sao, noi_dung)
        VALUES ($1, $2, $3, $4) RETURNING id`,
@@ -537,6 +538,7 @@ async function internalRoutes(request, response, method, path, body) {
     if (!["da_xem", "da_tiep_thu"].includes(status)) throw new HttpError(400, "Trạng thái xử lý không hợp lệ");
     const reply = body.reply == null ? "" : requireValue(body.reply, "Nội dung trả lời", { min: 0, max: 2000 });
     if (reply && reply.length < 3) throw new HttpError(400, "Nội dung trả lời phải có ít nhất 3 ký tự");
+    if (status === "da_tiep_thu" && !reply) throw new HttpError(400, "Vui lòng nhập nội dung phản hồi trước khi tiếp thu");
     await transaction(async client => {
       const result = await client.query(
         `SELECT khach_hang_id FROM phan_hoi WHERE id = $1 FOR UPDATE`,
@@ -565,7 +567,7 @@ async function internalRoutes(request, response, method, path, body) {
               k.ngay_ket_thuc AS "endAt", k.da_an AS hidden,
               count(p.khach_hang_id)::int AS recipients,
               count(p.ngay_hoan_thanh)::int AS completed,
-              round(100.0 * count(p.ngay_hoan_thanh) / nullif(count(p.khach_hang_id), 0), 2) AS "completionRate"
+              coalesce(round(100.0 * count(p.ngay_hoan_thanh) / nullif(count(p.khach_hang_id), 0), 2), 0) AS "completionRate"
          FROM khao_sat k LEFT JOIN phan_phoi_khao_sat p ON p.khao_sat_id = k.id
         GROUP BY k.id ORDER BY k.ngay_tao DESC`
     );
@@ -908,6 +910,33 @@ async function internalRoutes(request, response, method, path, body) {
       pool.query(`SELECT id, ma_do_uong AS code, ten_do_uong AS name, mo_ta AS description, dang_kinh_doanh AS active FROM do_uong ORDER BY id`)
     ]);
     json(response, 200, { preferences: preferences.rows, drinks: drinks.rows });
+    return true;
+  }
+  if (method === "POST" && path === "/internal/drinks") {
+    if (!['manager', 'admin'].includes(session.role)) throw new HttpError(403, "Bạn không có quyền thêm đồ uống");
+    const code = requireValue(body.maDoUong, "Mã đồ uống", { min: 2, max: 30 }).toLocaleUpperCase();
+    if (!/^[A-Z0-9_-]+$/.test(code)) throw new HttpError(400, "Mã đồ uống chỉ gồm chữ in hoa, số, gạch ngang hoặc gạch dưới");
+    const name = requireValue(body.tenDoUong, "Tên đồ uống", { min: 2, max: 150 });
+    const description = body.moTa == null || body.moTa.trim() === "" ? null : requireValue(body.moTa, "Mô tả", { max: 1000 });
+    const { rows } = await pool.query(
+      `INSERT INTO do_uong(ma_do_uong, ten_do_uong, mo_ta, dang_kinh_doanh)
+       VALUES ($1, $2, $3, true) RETURNING id`,
+      [code, name, description]
+    );
+    json(response, 201, { id: rows[0].id, message: "Đã thêm đồ uống mới" });
+    return true;
+  }
+  const drinkStatusPath = path.match(/^\/internal\/drinks\/(\d+)\/status$/);
+  if (method === "PATCH" && drinkStatusPath) {
+    if (!["manager", "admin"].includes(session.role)) throw new HttpError(403, "Bạn không có quyền cập nhật đồ uống");
+    const id = requireInteger(drinkStatusPath[1], "Mã đồ uống");
+    if (typeof body.active !== "boolean") throw new HttpError(400, "Trạng thái kinh doanh không hợp lệ");
+    const { rowCount } = await pool.query(
+      `UPDATE do_uong SET dang_kinh_doanh = $2 WHERE id = $1`,
+      [id, body.active]
+    );
+    if (!rowCount) throw new HttpError(404, "Không tìm thấy đồ uống");
+    json(response, 200, { message: body.active ? "Đã mở bán lại đồ uống" : "Đã ngừng bán đồ uống" });
     return true;
   }
   return false;

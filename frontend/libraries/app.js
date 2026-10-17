@@ -110,11 +110,11 @@ function surveyResultsView() {
 function feedbackView() {
   const items = internalSession.feedback;
   const newCount = items.filter(item => item.status === "moi").length;
-  return `<section class="page-heading compact"><div><p class="eyebrow">CHĂM SÓC KHÁCH HÀNG</p><h1>Phản hồi</h1><p>Lắng nghe và xử lý ý kiến khách hàng kịp thời.</p></div></section><div class="segmented"><button class="active">Tất cả <b>${items.length}</b></button><button>Mới <b>${newCount}</b></button></div><section class="feedback-list">${items.map(item => `<article class="feedback-card"><div class="avatar mint">${initials(item.customerName)}</div><div class="feedback-body"><div><strong>${escapeHtml(item.customerName)}</strong><span>• ${escapeHtml(item.drinkName)}</span></div><div class="stars">${"★".repeat(item.rating)}${"☆".repeat(5-item.rating)}</div><p>“${escapeHtml(item.content)}”</p>${item.reply ? `<div class="form-note"><strong>Đã trả lời:</strong> ${escapeHtml(item.reply)}</div>` : ""}<small>${formatDate(item.sentAt)}</small></div><div class="feedback-actions"><span class="status ${item.status === "moi" ? "new" : "active"}">${statusLabel(item.status)}</span>${item.status === "moi" ? `<button class="outline feedback-update" data-feedback-id="${item.id}" data-status="da_xem">Trả lời khách hàng</button>` : item.status === "da_xem" ? `<button class="outline feedback-update" data-feedback-id="${item.id}" data-status="da_tiep_thu">Phản hồi & tiếp thu</button>` : ""}</div></article>`).join("")}</section>`;
+  return `<section class="page-heading compact"><div><p class="eyebrow">CHĂM SÓC KHÁCH HÀNG</p><h1>Phản hồi</h1><p>Lắng nghe và xử lý ý kiến khách hàng kịp thời.</p></div></section><div class="segmented"><button class="active">Tất cả <b>${items.length}</b></button><button>Mới <b>${newCount}</b></button></div><section class="feedback-list">${items.map(item => `<article class="feedback-card"><div class="avatar mint">${initials(item.customerName)}</div><div class="feedback-body"><div><strong>${escapeHtml(item.customerName)}</strong><span>• ${escapeHtml(item.drinkName)}</span></div><div class="stars">${"★".repeat(item.rating)}${"☆".repeat(5-item.rating)}</div><p>“${escapeHtml(item.content)}”</p>${item.reply ? `<div class="form-note"><strong>Đã trả lời:</strong> ${escapeHtml(item.reply)}</div>` : ""}<small>${formatDate(item.sentAt)}</small></div><div class="feedback-actions"><span class="status ${item.status === "moi" ? "new" : "active"}">${statusLabel(item.status)}</span>${item.status !== "da_tiep_thu" ? `<button class="outline feedback-update" data-feedback-id="${item.id}">${item.status === "moi" ? "Xử lý phản hồi" : "Phản hồi & tiếp thu"}</button>` : ""}</div></article>`).join("")}</section><dialog class="manager-edit-dialog feedback-reply-dialog" id="feedbackReplyDialog" aria-labelledby="feedbackReplyTitle"><form class="profile-form" id="feedbackReplyForm"><div class="form-heading"><p class="eyebrow">CHĂM SÓC KHÁCH HÀNG</p><h2 id="feedbackReplyTitle">Xử lý phản hồi</h2><p id="feedbackReplySummary"></p></div><label>Trạng thái xử lý<select name="status" id="feedbackReplyStatus"><option value="da_tiep_thu">Phản hồi và tiếp thu</option><option value="da_xem">Chỉ đánh dấu đã xem</option></select></label><label>Nội dung gửi khách hàng<textarea name="reply" id="feedbackReplyContent" rows="6" maxlength="2000" placeholder="Nhập nội dung phản hồi rõ ràng, lịch sự..."></textarea><small id="feedbackReplyHint">Bắt buộc khi chọn Phản hồi và tiếp thu.</small></label><div class="auth-error" id="feedbackReplyError" role="alert" aria-live="polite"></div><footer><button class="outline" id="feedbackReplyCancel" type="button">Hủy</button><button class="primary" type="submit">Gửi phản hồi</button></footer></form></dialog>`;
 }
 
 function surveysView() {
-  return `<section class="page-heading compact"><div><p class="eyebrow">KHẢO SÁT</p><h1>Khảo sát khách hàng</h1><p>Theo dõi dữ liệu phân phối, tỷ lệ hoàn thành và khảo sát đã ẩn.</p></div><button class="primary" data-view="create-survey">＋ Tạo khảo sát</button></section><section class="survey-grid">${internalSession.surveys.map(s => `<article class="panel survey-card"><div class="survey-top"><span class="survey-icon">${s.status === "nhap" ? "✎" : "✓"}</span><span class="status ${s.hidden ? "locked" : s.status === "dang_mo" ? "active" : s.status === "nhap" ? "draft" : "locked"}">${s.hidden ? "Đã ẩn" : statusLabel(s.status)}</span></div><h2>${escapeHtml(s.title)}</h2><p>${escapeHtml(s.description || "Không có mô tả")}</p><div class="survey-stats"><div><small>Người nhận</small><strong>${s.recipients}</strong></div><div><small>Hoàn thành</small><strong>${s.completionRate}%</strong></div><div><small>Hạn trả lời</small><strong>${formatDate(s.endAt)}</strong></div></div><div class="survey-actions"><button class="outline survey-edit" data-id="${s.id}">Sửa</button><button class="outline survey-visibility" data-id="${s.id}" data-hidden="${!s.hidden}">${s.hidden ? "Khôi phục" : "Ẩn khảo sát"}</button><button class="outline survey-results" data-id="${s.id}">Xem kết quả</button></div></article>`).join("") || `<article class="panel empty-state"><h2>Chưa có khảo sát</h2><p>Tạo và gửi khảo sát đầu tiên cho khách hàng.</p></article>`}</section>`;
+  return `<section class="page-heading compact"><div><p class="eyebrow">KHẢO SÁT</p><h1>Khảo sát khách hàng</h1><p>Theo dõi dữ liệu phân phối, tỷ lệ hoàn thành và khảo sát đã ẩn.</p></div><button class="primary" data-view="create-survey">＋ Tạo khảo sát</button></section><section class="survey-grid">${internalSession.surveys.map(s => `<article class="panel survey-card"><div class="survey-top"><span class="survey-icon">${s.status === "nhap" ? "✎" : "✓"}</span><span class="status ${s.hidden ? "locked" : s.status === "dang_mo" ? "active" : s.status === "nhap" ? "draft" : "locked"}">${s.hidden ? "Đã ẩn" : statusLabel(s.status)}</span></div><h2>${escapeHtml(s.title)}</h2><p>${escapeHtml(s.description || "Không có mô tả")}</p><div class="survey-stats"><div><small>Người nhận</small><strong>${s.recipients}</strong></div><div><small>Hoàn thành</small><strong>${Number(s.completionRate || 0).toLocaleString("vi-VN")}%</strong></div><div><small>Hạn trả lời</small><strong>${formatDate(s.endAt)}</strong></div></div><div class="survey-actions"><button class="outline survey-edit" data-id="${s.id}">Sửa</button><button class="outline survey-visibility" data-id="${s.id}" data-hidden="${!s.hidden}">${s.hidden ? "Khôi phục" : "Ẩn khảo sát"}</button><button class="outline survey-results" data-id="${s.id}">Xem kết quả</button></div></article>`).join("") || `<article class="panel empty-state"><h2>Chưa có khảo sát</h2><p>Tạo và gửi khảo sát đầu tiên cho khách hàng.</p></article>`}</section>`;
 }
 
 function createSurveyView() {
@@ -230,7 +230,7 @@ function internalLoginView() {
 
 function adminCatalogView() {
   const catalogs = internalSession.catalogs || { preferences: [], drinks: [] };
-  return `<section class="page-heading compact"><div><p class="eyebrow">DANH MỤC HỆ THỐNG</p><h1>Danh mục</h1><p>Nhóm sở thích và đồ uống đang lưu trong PostgreSQL.</p></div></section><section class="catalog-layout"><article class="panel"><div class="panel-title"><div><h2>Nhóm sở thích</h2><p>${catalogs.preferences.length} nhóm</p></div></div>${catalogs.preferences.map((x,i)=>`<div class="catalog-row"><span class="catalog-icon">${i+1}</span><div><strong>${escapeHtml(x.name)}</strong><small>${escapeHtml(x.description || "Không có mô tả")}</small></div><span class="status ${x.active ? "active" : "locked"}">${x.active ? "Đang dùng" : "Ngừng dùng"}</span></div>`).join("")}</article><article class="panel"><div class="panel-title"><div><h2>Đồ uống</h2><p>${catalogs.drinks.length} sản phẩm</p></div></div>${catalogs.drinks.map(x=>`<div class="catalog-row"><span class="drink-dot green">☕</span><div><strong>${escapeHtml(x.name)}</strong><small>${escapeHtml(x.code)}</small></div><span class="status ${x.active ? "active" : "locked"}">${x.active ? "Kinh doanh" : "Ngừng bán"}</span></div>`).join("")}</article></section>`;
+  return `<section class="page-heading compact"><div><p class="eyebrow">DANH MỤC HỆ THỐNG</p><h1>Danh mục đồ uống</h1><p>Quản lý các món khách hàng có thể chọn để đánh giá.</p></div><button class="primary" id="openDrinkDialog">＋ Thêm đồ uống</button></section><section class="catalog-layout"><article class="panel"><div class="panel-title"><div><h2>Nhóm sở thích</h2><p>${catalogs.preferences.length} nhóm</p></div></div>${catalogs.preferences.map((x,i)=>`<div class="catalog-row"><span class="catalog-icon">${i+1}</span><div><strong>${escapeHtml(x.name)}</strong><small>${escapeHtml(x.description || "Không có mô tả")}</small></div><span class="status ${x.active ? "active" : "locked"}">${x.active ? "Đang dùng" : "Ngừng dùng"}</span></div>`).join("")}</article><article class="panel"><div class="panel-title"><div><h2>Đồ uống</h2><p>${catalogs.drinks.length} sản phẩm</p></div></div>${catalogs.drinks.map(x=>`<div class="catalog-row"><span class="drink-dot green">☕</span><div><strong>${escapeHtml(x.name)}</strong><small>${escapeHtml(x.code)} · ${escapeHtml(x.description || "Chưa có mô tả")}</small></div><div class="drink-actions"><span class="status ${x.active ? "active" : "locked"}">${x.active ? "Kinh doanh" : "Ngừng bán"}</span><button class="outline drink-status" data-id="${x.id}" data-active="${x.active ? "false" : "true"}">${x.active ? "Ngừng bán" : "Mở bán lại"}</button></div></div>`).join("")}</article></section><dialog class="manager-edit-dialog" id="drinkDialog"><form class="profile-form" id="drinkForm"><div class="form-heading"><p class="eyebrow">SẢN PHẨM MỚI</p><h2>Thêm đồ uống</h2><p>Món đang kinh doanh sẽ xuất hiện ngay trên trang đánh giá của Customer.</p></div><div class="form-grid"><label>Mã đồ uống *<input name="maDoUong" minlength="2" maxlength="30" placeholder="VD: TS03" required /></label><label>Tên đồ uống *<input name="tenDoUong" minlength="2" maxlength="150" placeholder="VD: Trà sữa matcha" required /></label></div><label>Mô tả<textarea name="moTa" rows="4" maxlength="1000" placeholder="Thành phần hoặc đặc điểm nổi bật"></textarea></label><div class="auth-error" id="drinkError" role="alert"></div><footer><button class="outline" id="cancelDrink" type="button">Hủy</button><button class="primary" type="submit">Thêm đồ uống</button></footer></form></dialog>`;
 }
 
 function loginView() {
@@ -281,19 +281,20 @@ function customerHelpView() {
 
 function placeholder(name, desc) { return `<section class="page-heading compact"><div><p class="eyebrow">MILKTEA-COFFEE</p><h1>${name}</h1><p>${desc}</p></div></section><section class="panel empty-state"><span>✦</span><h2>Khu vực đang được hoàn thiện</h2><p>Cấu trúc màn hình đã sẵn sàng để kết nối endpoint tương ứng trong REST API.</p><button class="primary action-toast">Xem tài liệu API</button></section>`; }
 
-const managerViews = { "internal-login": internalLoginView, dashboard, customers: customersView, "create-customer": createCustomerView, "customer-requests": customerRequestsView, feedback: feedbackView, surveys: surveysView, "create-survey": createSurveyView, "edit-survey": editSurveyView, reports: customerReportsView, "survey-results": surveyResultsView };
+const managerViews = { "internal-login": internalLoginView, dashboard, customers: customersView, "create-customer": createCustomerView, "customer-requests": customerRequestsView, feedback: feedbackView, surveys: surveysView, "create-survey": createSurveyView, "edit-survey": editSurveyView, reports: customerReportsView, "survey-results": surveyResultsView, "admin-catalog": adminCatalogView };
 const adminViews = { "internal-login": internalLoginView, "admin-dashboard": adminDashboard, accounts: accountsView, customers: customersView, "customer-requests": customerRequestsView };
 const customerViews = { login: loginView, register: registerView, "customer-home": customerHome, profile: profileView, "my-feedback": myFeedbackView, "my-surveys": mySurveysView, notifications: notificationsView, "take-survey": surveyTakeView, "completed-survey": completedSurveyView, help: customerHelpView };
 const titles = { "internal-login": "Đăng nhập nội bộ", "admin-dashboard": "Quản trị tối cao", accounts: "Quản lý Manager", "customer-requests": "Yêu cầu Admin", "admin-catalog": "Danh mục", dashboard: "Tổng quan", customers: "Khách hàng", "create-customer": "Thêm khách hàng", feedback: "Phản hồi", surveys: "Khảo sát", "create-survey": "Tạo khảo sát", "edit-survey": "Sửa khảo sát", "survey-results": "Kết quả khảo sát", reports: "Báo cáo khách hàng", settings: "Cài đặt", login: "Đăng nhập", register: "Đăng ký", "customer-home": "Trang chủ", profile: "Hồ sơ", "my-feedback": "Phản hồi của tôi", "my-surveys": "Khảo sát của tôi", notifications: "Thông báo", "take-survey": "Thực hiện khảo sát", "completed-survey": "Kết quả khảo sát", help: "Trung tâm trợ giúp" };
 const navs = {
   admin: `<p class="nav-label">Quản trị tối cao</p><button class="nav-item" data-view="admin-dashboard"><span class="icon">⌂</span>Tổng quan</button><button class="nav-item" data-view="accounts"><span class="icon">♧</span>Quản lý Manager</button><button class="nav-item" data-view="customer-requests"><span class="icon">◌</span>Trung tâm phê duyệt <b id="approvalNavCount" hidden></b></button><button class="nav-item" data-view="customers"><span class="icon">♧</span>Khách hàng</button>`,
-  manager: `<p class="nav-label">Không gian làm việc</p><button class="nav-item" data-view="dashboard"><span class="icon">⌂</span>Tổng quan</button><button class="nav-item" data-view="customers"><span class="icon">♧</span>Khách hàng <b id="customerCount">…</b></button><button class="nav-item" data-view="customer-requests"><span class="icon">◌</span>Yêu cầu Admin</button><button class="nav-item" data-view="feedback"><span class="icon">◌</span>Phản hồi <i id="feedbackCount">…</i></button><button class="nav-item" data-view="surveys"><span class="icon">✓</span>Khảo sát</button><button class="nav-item" data-view="reports"><span class="icon">⌁</span>Báo cáo</button>`,
+  manager: `<p class="nav-label">Không gian làm việc</p><button class="nav-item" data-view="dashboard"><span class="icon">⌂</span>Tổng quan</button><button class="nav-item" data-view="customers"><span class="icon">♧</span>Khách hàng <b id="customerCount">…</b></button><button class="nav-item" data-view="customer-requests"><span class="icon">◌</span>Yêu cầu Admin</button><button class="nav-item" data-view="feedback"><span class="icon">◌</span>Phản hồi <i id="feedbackCount">…</i></button><button class="nav-item" data-view="surveys"><span class="icon">✓</span>Khảo sát</button><button class="nav-item" data-view="admin-catalog"><span class="icon">☕</span>Đồ uống</button><button class="nav-item" data-view="reports"><span class="icon">⌁</span>Báo cáo</button>`,
   customer: `<p class="nav-label">Tài khoản của tôi</p><button class="nav-item" data-view="customer-home"><span class="icon">⌂</span>Trang chủ</button><button class="nav-item" data-view="profile"><span class="icon">♧</span>Hồ sơ cá nhân</button><button class="nav-item" data-view="my-feedback"><span class="icon">♡</span>Phản hồi của tôi</button><button class="nav-item" data-view="my-surveys"><span class="icon">✓</span>Khảo sát</button><button class="nav-item" data-view="notifications"><span class="icon">♢</span>Thông báo <i id="notificationCount">0</i></button><p class="nav-label">Hỗ trợ</p><button class="nav-item" data-view="help"><span class="icon">?</span>Trung tâm trợ giúp</button>`
 };
 const app = document.querySelector("#app");
 const toast = document.querySelector("#toast");
 let currentRole = "manager";
 let navigationVersion = 0;
+let feedbackSubmitting = false;
 
 function notify(message = "Tính năng đã sẵn sàng để kết nối API") { toast.textContent = message; toast.classList.add("show"); setTimeout(() => toast.classList.remove("show"), 2400); }
 function formPayload(form) { return Object.fromEntries(new FormData(form).entries()); }
@@ -464,14 +465,68 @@ async function setupCustomerPage(view) {
 
     if (view === "my-feedback") {
       document.querySelector("#feedbackDrink").innerHTML = `<option value="">Chọn đồ uống</option>${customerSession.options.drinks.map(item => `<option value="${item.id}">${escapeHtml(item.tenDoUong)}</option>`).join("")}`;
-      const history = (await customerApi.feedback()).feedback;
+      const feedbackForm = document.querySelector("#feedbackForm");
+      const feedbackError = document.querySelector("#feedbackError");
+      document.querySelectorAll(".star-picker button").forEach((star, index, all) => star.addEventListener("click", () => {
+        document.querySelector("#feedbackRating").value = star.dataset.rating;
+        feedbackError.textContent = "";
+        all.forEach((item, i) => item.classList.toggle("picked", i <= index));
+      }));
+      feedbackForm.addEventListener("input", () => { feedbackError.textContent = ""; });
+      feedbackForm.addEventListener("submit", async event => {
+        event.preventDefault();
+        if (feedbackSubmitting) return;
+        const form = event.currentTarget;
+        const payload = formPayload(form);
+        payload.doUongId = Number(payload.doUongId);
+        payload.soSao = Number(payload.soSao);
+        payload.noiDung = payload.noiDung.trim();
+        if (!payload.doUongId) {
+          feedbackError.textContent = "Vui lòng chọn đồ uống cần đánh giá.";
+          return;
+        }
+        if (!payload.soSao) {
+          feedbackError.textContent = "Vui lòng chọn mức độ hài lòng từ 1 đến 5 sao.";
+          return;
+        }
+        if (payload.noiDung.length < 10) {
+          feedbackError.textContent = "Nội dung phản hồi cần có ít nhất 10 ký tự.";
+          return;
+        }
+        feedbackSubmitting = true;
+        const button = form.querySelector("button[type='submit']");
+        button.dataset.label = "Gửi phản hồi";
+        setFormBusy(form, true);
+        try {
+          await customerApi.sendFeedback(payload);
+          notify("Cảm ơn bạn! Phản hồi đã được gửi");
+          feedbackSubmitting = false;
+          render("my-feedback");
+        } catch (error) {
+          feedbackSubmitting = false;
+          feedbackError.textContent = error.message;
+          setFormBusy(form, false);
+        }
+      });
+      let history = [];
+      let historyError = null;
+      try {
+        history = (await customerApi.feedback()).feedback;
+      } catch (error) {
+        historyError = error;
+      }
       const newCount = history.filter(item => item.trangThai === "moi").length;
       const handledCount = history.length - newCount;
-      document.querySelector("#feedbackTotal").textContent = `${history.length} phản hồi`;
-      document.querySelector("#allFeedbackCount").textContent = history.length;
-      document.querySelector("#newFeedbackCount").textContent = newCount;
-      document.querySelector("#handledFeedbackCount").textContent = handledCount;
+      document.querySelector("#feedbackTotal").textContent = historyError ? "Chưa tải được" : `${history.length} phản hồi`;
+      document.querySelector("#allFeedbackCount").textContent = historyError ? "—" : history.length;
+      document.querySelector("#newFeedbackCount").textContent = historyError ? "—" : newCount;
+      document.querySelector("#handledFeedbackCount").textContent = historyError ? "—" : handledCount;
       const renderFeedbackHistory = () => {
+        if (historyError) {
+          document.querySelector("#feedbackHistory").innerHTML = `<article class="history-card feedback-empty"><p>Chưa tải được lịch sử phản hồi. Bạn vẫn có thể gửi phản hồi mới ở biểu mẫu bên cạnh.</p></article>`;
+          document.querySelector("#feedbackLoadMore").hidden = true;
+          return;
+        }
         const filtered = history.filter(item => customerSession.feedbackFilter === "all" ||
           (customerSession.feedbackFilter === "new" ? item.trangThai === "moi" : item.trangThai !== "moi"));
         const visible = filtered.slice(0, customerSession.feedbackVisible);
@@ -500,25 +555,6 @@ async function setupCustomerPage(view) {
         renderFeedbackHistory();
       });
       renderFeedbackHistory();
-      document.querySelectorAll(".star-picker button").forEach((star, index, all) => star.addEventListener("click", () => {
-        document.querySelector("#feedbackRating").value = star.dataset.rating;
-        document.querySelector("#feedbackError").textContent = "";
-        all.forEach((item, i) => item.classList.toggle("picked", i <= index));
-      }));
-      document.querySelector("#feedbackForm").addEventListener("input", () => { document.querySelector("#feedbackError").textContent = ""; });
-      document.querySelector("#feedbackForm").addEventListener("submit", async event => {
-        event.preventDefault();
-        if (feedbackSubmitting) return;
-        const form = event.currentTarget; const payload = formPayload(form); payload.doUongId = Number(payload.doUongId); payload.soSao = Number(payload.soSao);
-        if (!payload.soSao) {
-          document.querySelector("#feedbackError").textContent = "Vui lòng chọn mức độ hài lòng từ 1 đến 5 sao.";
-          return;
-        }
-        feedbackSubmitting = true;
-        const button = form.querySelector("button[type='submit']"); button.dataset.label = "Gửi phản hồi"; setFormBusy(form, true);
-        try { await customerApi.sendFeedback(payload); notify("Cảm ơn bạn! Phản hồi đã được gửi"); feedbackSubmitting = false; render("my-feedback"); }
-        catch (error) { feedbackSubmitting = false; document.querySelector("#feedbackError").textContent = error.message; setFormBusy(form, false); }
-      });
     }
 
     if (view === "my-surveys") {
@@ -774,6 +810,49 @@ async function setupInternalPage(view, renderVersion) {
     document.querySelector("#userInitials").textContent = initials(name);
     document.querySelector("#userName").textContent = name;
     document.querySelector("#userRole").textContent = internalSession.account.role === "admin" ? "Quản trị viên" : "Manager";
+    if (view === "admin-catalog") {
+      const dialog = document.querySelector("#drinkDialog");
+      const form = document.querySelector("#drinkForm");
+      document.querySelector("#openDrinkDialog")?.addEventListener("click", () => dialog.showModal());
+      document.querySelector("#cancelDrink")?.addEventListener("click", () => dialog.close());
+      dialog?.addEventListener("click", event => { if (event.target === dialog) dialog.close(); });
+      form?.addEventListener("input", () => { document.querySelector("#drinkError").textContent = ""; });
+      form?.addEventListener("submit", async event => {
+        event.preventDefault();
+        const payload = formPayload(form);
+        payload.maDoUong = payload.maDoUong.trim().toLocaleUpperCase();
+        const button = form.querySelector("button[type='submit']");
+        button.dataset.label = "Thêm đồ uống";
+        setFormBusy(form, true);
+        try {
+          await internalApi.createDrink(payload);
+          internalSession.catalogs = await internalApi.catalogs();
+          customerSession.options = null;
+          dialog.close();
+          notify("Đã thêm đồ uống và cập nhật danh sách đánh giá");
+          render("admin-catalog");
+        } catch (error) {
+          document.querySelector("#drinkError").textContent = error.message;
+          setFormBusy(form, false);
+        }
+      });
+      document.querySelectorAll(".drink-status").forEach(button => button.addEventListener("click", async () => {
+        const active = button.dataset.active === "true";
+        const action = active ? "mở bán lại" : "ngừng bán";
+        if (!window.confirm(`Bạn có chắc muốn ${action} món này?`)) return;
+        button.disabled = true;
+        try {
+          await internalApi.updateDrinkStatus(button.dataset.id, active);
+          internalSession.catalogs = await internalApi.catalogs();
+          customerSession.options = null;
+          notify(active ? "Đã mở bán lại đồ uống" : "Đã ngừng bán; lịch sử đánh giá vẫn được giữ");
+          render("admin-catalog");
+        } catch (error) {
+          notify(error.message);
+          button.disabled = false;
+        }
+      }));
+    }
     document.querySelector("#createCustomerForm")?.addEventListener("submit", async event => {
       event.preventDefault();
       const form = event.currentTarget;
@@ -1050,16 +1129,51 @@ async function setupInternalPage(view, renderVersion) {
         currentRole === "admin"
       );
     });
-    document.querySelectorAll(".feedback-update").forEach(button => button.addEventListener("click", async () => {
-      button.disabled = true;
-      try {
-        const reply = window.prompt("Nhập nội dung phản hồi gửi đến khách hàng (có thể để trống):", "") ?? "";
-        await internalApi.updateFeedback(button.dataset.feedbackId, button.dataset.status, reply);
-        internalSession.loaded.delete("feedback");
-        notify("Đã cập nhật trạng thái phản hồi");
-        render("feedback");
-      } catch (error) { notify(error.message); button.disabled = false; }
+    const feedbackReplyDialog = document.querySelector("#feedbackReplyDialog");
+    const feedbackReplyForm = document.querySelector("#feedbackReplyForm");
+    const feedbackReplyStatus = document.querySelector("#feedbackReplyStatus");
+    const feedbackReplyContent = document.querySelector("#feedbackReplyContent");
+    const updateFeedbackReplyRequirement = () => {
+      const requiresReply = feedbackReplyStatus?.value === "da_tiep_thu";
+      if (feedbackReplyContent) feedbackReplyContent.required = requiresReply;
+      const hint = document.querySelector("#feedbackReplyHint");
+      if (hint) hint.textContent = requiresReply ? "Bắt buộc khi chọn Phản hồi và tiếp thu." : "Có thể để trống nếu chỉ đánh dấu đã xem.";
+    };
+    document.querySelectorAll(".feedback-update").forEach(button => button.addEventListener("click", () => {
+      const feedback = internalSession.feedback.find(item => String(item.id) === String(button.dataset.feedbackId));
+      if (!feedback) { notify("Không tìm thấy phản hồi cần xử lý"); return; }
+      feedbackReplyForm.dataset.feedbackId = feedback.id;
+      feedbackReplyStatus.value = "da_tiep_thu";
+      feedbackReplyContent.value = feedback.reply || "";
+      document.querySelector("#feedbackReplySummary").textContent = `${feedback.customerName} · ${feedback.drinkName}`;
+      document.querySelector("#feedbackReplyError").textContent = "";
+      updateFeedbackReplyRequirement();
+      feedbackReplyDialog.showModal();
+      feedbackReplyContent.focus();
     }));
+    feedbackReplyStatus?.addEventListener("change", updateFeedbackReplyRequirement);
+    feedbackReplyForm?.addEventListener("input", () => { document.querySelector("#feedbackReplyError").textContent = ""; });
+    document.querySelector("#feedbackReplyCancel")?.addEventListener("click", () => feedbackReplyDialog.close());
+    feedbackReplyDialog?.addEventListener("click", event => { if (event.target === feedbackReplyDialog) feedbackReplyDialog.close(); });
+    feedbackReplyForm?.addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const payload = formPayload(form);
+      const button = form.querySelector("button[type='submit']");
+      button.dataset.label = "Gửi phản hồi";
+      setFormBusy(form, true);
+      try {
+        await internalApi.updateFeedback(form.dataset.feedbackId, payload.status, payload.reply);
+        internalSession.loaded.delete("feedback");
+        internalSession.loaded.delete("dashboard");
+        feedbackReplyDialog.close();
+        notify(payload.status === "da_tiep_thu" ? "Đã gửi phản hồi đến khách hàng" : "Đã đánh dấu phản hồi là đã xem");
+        render("feedback");
+      } catch (error) {
+        document.querySelector("#feedbackReplyError").textContent = error.message;
+        setFormBusy(form, false);
+      }
+    });
     if (view === "create-survey" || view === "edit-survey") {
       const isEdit = view === "edit-survey";
       const form = document.querySelector(isEdit ? "#editSurveyForm" : "#bulkSurveyForm");
@@ -1273,6 +1387,9 @@ document.addEventListener("click", event => {
   const navigationButton = event.target.closest("[data-view]");
   if (!navigationButton) return;
   event.preventDefault();
+  if (currentRole !== "customer" && navigationButton.dataset.view === "surveys") {
+    internalSession.loaded.delete("surveys");
+  }
   render(navigationButton.dataset.view);
 });
 document.addEventListener("keydown", e => { if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); document.querySelector("#globalSearch").focus(); } });

@@ -109,5 +109,7 @@ export const internalApi = {
   updateSurvey: (id, survey) => internalRequest(`/internal/surveys/${id}`, { method: "PATCH", body: survey }),
   setSurveyVisibility: (id, hidden) => internalRequest(`/internal/surveys/${id}/visibility`, { method: "PATCH", body: { hidden } }),
   accounts: () => internalRequest("/internal/accounts"),
-  catalogs: () => internalRequest("/internal/catalogs")
+  catalogs: () => internalRequest("/internal/catalogs"),
+  createDrink: drink => internalRequest("/internal/drinks", { method: "POST", body: drink }),
+  updateDrinkStatus: (id, active) => internalRequest(`/internal/drinks/${id}/status`, { method: "PATCH", body: { active } })
 };
