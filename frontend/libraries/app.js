@@ -97,7 +97,8 @@ function createCustomerView() {
 function customerReportsView() {
   const reports = internalSession.reports || { ages: [], preferences: [] };
   const rows = (items, totalLabel) => items.length ? items.map(item => `<div class="report-row"><div><strong>${escapeHtml(item.label)}</strong><small>${item.count} ${totalLabel}</small></div><strong>${Number(item.percentage || 0).toLocaleString("vi-VN")}%</strong><div class="report-track"><i style="width:${Math.max(0, Math.min(100, Number(item.percentage || 0)))}%"></i></div></div>`).join("") : `<p>Chưa có dữ liệu để thống kê.</p>`;
-  return `<section class="page-heading compact"><div><p class="eyebrow">BÁO CÁO KHÁCH HÀNG</p><h1>Độ tuổi và sở thích</h1><p>Tỷ lệ được tính trên toàn bộ hồ sơ khách hàng hiện có, bao gồm tài khoản đang khóa.</p></div></section><section class="catalog-layout"><article class="panel list-panel"><div class="panel-title"><div><h2>Phân bố độ tuổi</h2><p>Nhóm tuổi và tỷ lệ khách hàng</p></div></div>${rows(reports.ages, "khách hàng")}</article><article class="panel list-panel"><div class="panel-title"><div><h2>Sở thích khách hàng</h2><p>Sở thích mặc định trên hồ sơ</p></div></div>${rows(reports.preferences, "khách hàng")}</article></section>`;
+  const totalCustomers = reports.ages.reduce((total, item) => total + Number(item.count || 0), 0);
+  return `<section class="page-heading compact"><div><p class="eyebrow">BÁO CÁO KHÁCH HÀNG · DỮ LIỆU TRỰC TIẾP</p><h1>Độ tuổi và sở thích</h1><p>Tỷ lệ được tính từ <strong>${totalCustomers}</strong> hồ sơ khách hàng hiện có, bao gồm tài khoản đang khóa.</p></div><button class="outline" data-view="reports">↻ Làm mới số liệu</button></section><section class="catalog-layout"><article class="panel list-panel"><div class="panel-title"><div><h2>Phân bố độ tuổi</h2><p>Đồng bộ trực tiếp từ API và PostgreSQL</p></div><span class="feedback-total">${totalCustomers} khách</span></div>${rows(reports.ages, "khách hàng")}</article><article class="panel list-panel"><div class="panel-title"><div><h2>Sở thích khách hàng</h2><p>Sở thích mặc định trên hồ sơ</p></div></div>${rows(reports.preferences, "khách hàng")}</article></section>`;
 }
 
 function surveyResultsView() {
@@ -1387,8 +1388,8 @@ document.addEventListener("click", event => {
   const navigationButton = event.target.closest("[data-view]");
   if (!navigationButton) return;
   event.preventDefault();
-  if (currentRole !== "customer" && navigationButton.dataset.view === "surveys") {
-    internalSession.loaded.delete("surveys");
+  if (currentRole !== "customer" && ["surveys", "reports"].includes(navigationButton.dataset.view)) {
+    internalSession.loaded.delete(navigationButton.dataset.view);
   }
   render(navigationButton.dataset.view);
 });
