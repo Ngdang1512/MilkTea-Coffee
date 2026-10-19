@@ -374,64 +374,6 @@ function createCustomerView() {
   return `<section class="page-heading compact"><div><p class="eyebrow">KHÁCH HÀNG</p><h1>Thêm khách hàng mới</h1><p>Tạo tài khoản và hồ sơ thành viên. Chia sẻ mật khẩu ban đầu an toàn với khách hàng.</p></div></section><form class="panel profile-form" id="createCustomerForm"><div class="form-grid"><label>Tên đăng nhập *<input name="tenDangNhap" minlength="3" maxlength="100" pattern="[A-Za-z0-9._-]+" required /></label><label>Mật khẩu ban đầu *<input name="matKhau" type="password" minlength="8" maxlength="128" autocomplete="new-password" required /></label><label>Họ và tên *<input name="hoTen" minlength="2" maxlength="150" required /></label><label>Năm sinh *<input name="namSinh" type="number" min="1900" max="${new Date().getFullYear()}" required /></label><label>Giới tính<select name="gioiTinh"><option value="khong_cung_cap">Không cung cấp</option><option value="nam">Nam</option><option value="nu">Nữ</option><option value="khac">Khác</option></select></label><label>Sở thích mặc định *<select name="soThichId" required><option value="">Chọn sở thích</option>${preferences.filter(item => item.active).map(item => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join("")}</select></label></div><div class="auth-error" id="createCustomerError" role="alert"></div><footer><button type="button" class="outline" data-view="customers">Hủy</button><button class="primary" type="submit">Tạo khách hàng</button></footer></form>`;
 }
 
-function customerReportsView() {
-  const reports = internalSession.reports || { ages: [], preferences: [] };
-  const rows = (items, totalLabel) => items.length ? items.map(item => `<div class="report-row"><div><strong>${escapeHtml(item.label)}</strong><small>${item.count} ${totalLabel}</small></div><strong>${Number(item.percentage || 0).toLocaleString("vi-VN")}%</strong><div class="report-track"><i style="width:${Math.max(0, Math.min(100, Number(item.percentage || 0)))}%"></i></div></div>`).join("") : `<p>Chưa có dữ liệu để thống kê.</p>`;
-  const totalCustomers = reports.ages.reduce((total, item) => total + Number(item.count || 0), 0);
-  return `<section class="page-heading compact"><div><p class="eyebrow">BÁO CÁO KHÁCH HÀNG · DỮ LIỆU TRỰC TIẾP</p><h1>Độ tuổi và sở thích</h1><p>Tỷ lệ được tính từ <strong>${totalCustomers}</strong> hồ sơ khách hàng hiện có, bao gồm tài khoản đang khóa.</p></div><button class="outline" data-view="reports">↻ Làm mới số liệu</button></section><section class="catalog-layout"><article class="panel list-panel"><div class="panel-title"><div><h2>Phân bố độ tuổi</h2><p>Đồng bộ trực tiếp từ API và PostgreSQL</p></div><span class="feedback-total">${totalCustomers} khách</span></div>${rows(reports.ages, "khách hàng")}</article><article class="panel list-panel"><div class="panel-title"><div><h2>Sở thích khách hàng</h2><p>Sở thích mặc định trên hồ sơ</p></div></div>${rows(reports.preferences, "khách hàng")}</article></section>`;
-}
-
-  <form class="panel profile-form" id="createCustomerForm">
-    <div class="form-grid">
-      <label>
-        Tên đăng nhập *
-        <input name="tenDangNhap" minlength="3" maxlength="100" pattern="[A-Za-z0-9._-]+" placeholder="Ví dụ: khach_sg01" required />
-      </label>
-      <label>
-        Mật khẩu ban đầu *
-        <input name="matKhau" type="password" minlength="8" maxlength="128" autocomplete="new-password" placeholder="Tối thiểu 8 ký tự" required />
-      </label>
-      <label>
-        Họ và tên *
-        <input name="hoTen" minlength="2" maxlength="150" placeholder="Nguyễn Văn A" required />
-      </label>
-      <label>
-        Năm sinh *
-        <input name="namSinh" type="number" min="1900" max="${new Date().getFullYear()}" placeholder="2000" required />
-      </label>
-      <label>
-        Giới tính
-        <select name="gioiTinh">
-          <option value="khong_cung_cap">Không cung cấp</option>
-          <option value="nam">Nam</option>
-          <option value="nu">Nữ</option>
-          <option value="khac">Khác</option>
-        </select>
-      </label>
-      <label>
-        Sở thích mặc định *
-        <select name="soThichId" required>
-          <option value="">Chọn sở thích</option>
-          ${preferences.filter(item => item.active !== false).map(item => `<option value="${item.id}">${escapeHtml(item.name)}</option>`).join("")}
-        </select>
-      </label>
-      <label class="full-width">
-        Phân vùng phụ trách
-        <select name="phanVung">
-          <option value="mien_nam">Miền Nam (Phân vùng phụ trách)</option>
-          <option value="mien_trung">Miền Trung</option>
-          <option value="mien_bac">Miền Bắc</option>
-        </select>
-      </label>
-    </div>
-    <div class="auth-error" id="createCustomerError" role="alert"></div>
-    <footer>
-      <button type="button" class="outline" data-view="customers">Hủy</button>
-      <button class="primary" type="submit">Tạo khách hàng</button>
-    </footer>
-  </form>`;
-}
-
 /* ══════════════════════════════════════════════════════════════════════
    3. QUẢN LÝ PHẢN HỒI (3 BƯỚC: CHỜ XỬ LÝ -> ĐANG XỬ LÝ -> ĐÃ GIẢI QUYẾT)
    ══════════════════════════════════════════════════════════════════════ */
@@ -1308,7 +1250,7 @@ const managerViews = {
   "edit-survey": editSurveyView,
   reports: customerReportsView,
   "survey-results": surveyResultsView,
-  catalog: adminCatalogView
+  "admin-catalog": adminCatalogView
 };
 
 const adminViews = {
@@ -1328,7 +1270,9 @@ const customerViews = {
   "my-feedback": myFeedbackView,
   "my-surveys": mySurveysView,
   notifications: notificationsView,
-  "take-survey": surveyTakeView
+  "take-survey": surveyTakeView,
+  "completed-survey": completedSurveyView,
+  help: customerHelpView
 };
 
 const titles = {
@@ -1358,10 +1302,6 @@ const titles = {
   "take-survey": "Thực hiện khảo sát"
 };
 
-const managerViews = { "internal-login": internalLoginView, dashboard, customers: customersView, "create-customer": createCustomerView, "customer-requests": customerRequestsView, feedback: feedbackView, surveys: surveysView, "create-survey": createSurveyView, "edit-survey": editSurveyView, reports: customerReportsView, "survey-results": surveyResultsView, "admin-catalog": adminCatalogView };
-const adminViews = { "internal-login": internalLoginView, "admin-dashboard": adminDashboard, accounts: accountsView, customers: customersView, "customer-requests": customerRequestsView };
-const customerViews = { login: loginView, register: registerView, "customer-home": customerHome, profile: profileView, "my-feedback": myFeedbackView, "my-surveys": mySurveysView, notifications: notificationsView, "take-survey": surveyTakeView, "completed-survey": completedSurveyView, help: customerHelpView };
-const titles = { "internal-login": "Đăng nhập nội bộ", "admin-dashboard": "Quản trị tối cao", accounts: "Quản lý Manager", "customer-requests": "Yêu cầu Admin", "admin-catalog": "Danh mục", dashboard: "Tổng quan", customers: "Khách hàng", "create-customer": "Thêm khách hàng", feedback: "Phản hồi", surveys: "Khảo sát", "create-survey": "Tạo khảo sát", "edit-survey": "Sửa khảo sát", "survey-results": "Kết quả khảo sát", reports: "Báo cáo khách hàng", settings: "Cài đặt", login: "Đăng nhập", register: "Đăng ký", "customer-home": "Trang chủ", profile: "Hồ sơ", "my-feedback": "Phản hồi của tôi", "my-surveys": "Khảo sát của tôi", notifications: "Thông báo", "take-survey": "Thực hiện khảo sát", "completed-survey": "Kết quả khảo sát", help: "Trung tâm trợ giúp" };
 const navs = {
   admin: `<p class="nav-label">Quản trị tối cao</p><button class="nav-item" data-view="admin-dashboard"><span class="icon">⌂</span>Tổng quan</button><button class="nav-item" data-view="accounts"><span class="icon">♧</span>Quản lý Manager</button><button class="nav-item" data-view="customer-requests"><span class="icon">◌</span>Trung tâm phê duyệt <b id="approvalNavCount" hidden></b></button><button class="nav-item" data-view="customers"><span class="icon">♧</span>Khách hàng</button>`,
   manager: `<p class="nav-label">Không gian làm việc</p><button class="nav-item" data-view="dashboard"><span class="icon">⌂</span>Tổng quan</button><button class="nav-item" data-view="customers"><span class="icon">♧</span>Khách hàng <b id="customerCount">…</b></button><button class="nav-item" data-view="customer-requests"><span class="icon">◌</span>Yêu cầu Admin</button><button class="nav-item" data-view="feedback"><span class="icon">◌</span>Phản hồi <i id="feedbackCount">…</i></button><button class="nav-item" data-view="surveys"><span class="icon">✓</span>Khảo sát</button><button class="nav-item" data-view="admin-catalog"><span class="icon">☕</span>Đồ uống</button><button class="nav-item" data-view="reports"><span class="icon">⌁</span>Báo cáo</button>`,
@@ -1427,12 +1367,6 @@ async function setupCustomerPage(view) {
       payload.namSinh = Number(payload.namSinh); payload.soThichId = Number(payload.soThichId);
       const data = await customerApi.register(payload); customerSession.profile = data.profile;
       notify("Đăng ký thành công"); applyRole("customer");
-      payload.namSinh = Number(payload.namSinh);
-      payload.soThichId = Number(payload.soThichId);
-      const data = await customerApi.register(payload);
-      customerSession.profile = data.profile;
-      notify("Đăng ký thành viên thành công");
-      applyRole("customer");
     } catch (error) { showError(error); setFormBusy(form, false); }
   });
 
@@ -2687,44 +2621,6 @@ async function setupInternalPage(view, renderVersion) {
         setFormBusy(form, false);
       }
     });
-    if (view === "create-survey" || view === "edit-survey") {
-      const isEdit = view === "edit-survey";
-      const form = document.querySelector(isEdit ? "#editSurveyForm" : "#bulkSurveyForm");
-      const recipients = document.querySelector("#surveyRecipients");
-      if (recipients) {
-        document.querySelectorAll("input[name='recipientMode']").forEach(input => input.addEventListener("change", () => {
-          recipients.disabled = formPayload(form).recipientMode !== "selected";
-        }));
-      }
-      document.querySelector("#addSurveyQuestion")?.addEventListener("click", () => {
-        document.querySelector("#surveyQuestions").insertAdjacentHTML("beforeend", `<div class="form-grid survey-question-input"><label>Câu hỏi *<input name="question" minlength="3" required /></label><label>Các lựa chọn *<input name="choices" maxlength="5000" placeholder="Lựa chọn 1; Lựa chọn 2" required /></label><button type="button" class="outline remove-survey-question">Xóa câu hỏi</button></div>`);
-      });
-      document.querySelector("#surveyQuestions")?.addEventListener("click", event => {
-        if (event.target.closest(".remove-survey-question")) {
-          if (document.querySelectorAll(".survey-question-input").length <= 1) {
-            notify("Khảo sát phải có ít nhất một câu hỏi");
-            return;
-          }
-          event.target.closest(".survey-question-input").remove();
-        }
-      });
-      form?.addEventListener("submit", async event => {
-        event.preventDefault();
-        const payload = formPayload(form);
-        const questions = [...form.querySelectorAll(".survey-question-input")].map(row => ({ content: row.querySelector('[name="question"]').value.trim(), choices: row.querySelector('[name="choices"]').value.split(";").map(value => value.trim()).filter(Boolean) }));
-        const deadline = payload.endAt ? new Date(payload.endAt) : null;
-        const originalDeadline = isEdit && internalSession.editSurvey.endAt ? new Date(internalSession.editSurvey.endAt) : null;
-        const keepsExpiredDeadline = deadline && originalDeadline && Math.floor(deadline.getTime() / 60000) === Math.floor(originalDeadline.getTime() / 60000);
-        if (deadline && (!Number.isFinite(deadline.getTime()) || (deadline.getTime() <= Date.now() && !keepsExpiredDeadline))) {
-          document.querySelector("#surveyError").textContent = "Hạn khảo sát phải là thời điểm trong tương lai. Vui lòng chọn lại ngày giờ.";
-          return;
-        }
-        const recipientMode = isEdit ? null : form.querySelector("input[name='recipientMode']:checked").value;
-        const customerIds = isEdit ? undefined : recipientMode === "all" ? null : [...recipients.selectedOptions].map(option => Number(option.value));
-        const button = form.querySelector("button[type='submit']");
-        button.dataset.label = isEdit ? "Lưu thay đổi" : "Phát hành và thông báo";
-        setFormBusy(form, true);
-
     // Admin trực tiếp khóa/mở khóa Customer
     document.querySelectorAll(".customer-status").forEach(button => {
       button.addEventListener("click", async () => {
