@@ -783,16 +783,16 @@ async function internalRoutes(request, response, method, path, body) {
       }
       const existingRequest = await client.query(
         `SELECT id FROM yeu_cau_admin_khach_hang
-          WHERE khach_hang_id = $1 AND loai = $2 AND trang_thai = 'pending' LIMIT 1`,
-        [customerId, action]
+          WHERE khach_hang_id = $1 AND loai = 'lock_customer' AND trang_thai = 'pending' LIMIT 1`,
+        [customerId]
       );
       if (existingRequest.rowCount) {
         throw new HttpError(409, isUnlock ? "Đã có yêu cầu mở khóa đang chờ Admin xử lý" : "Đã có yêu cầu khóa đang chờ Admin xử lý");
       }
       const result = await client.query(
         `INSERT INTO yeu_cau_admin_khach_hang(nguoi_yeu_cau_id, khach_hang_id, khach_hang_ten, loai, ly_do)
-         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-        [session.id, customerId, target.rows[0].name, action, reason]
+         VALUES ($1, $2, $3, 'lock_customer', $4) RETURNING id`,
+        [session.id, customerId, target.rows[0].name, reason]
       );
       return result.rows;
     });
