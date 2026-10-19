@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS yeu_cau_admin_khach_hang (
   ghi_chu_quyet_dinh text,
   ngay_tao timestamptz NOT NULL DEFAULT now(),
   ngay_quyet_dinh timestamptz,
-  CONSTRAINT ck_yeu_cau_loai CHECK (loai IN ('lock_customer', 'delete_customer')),
+  CONSTRAINT ck_yeu_cau_loai CHECK (loai IN ('lock_customer', 'unlock_customer', 'delete_customer')),
   CONSTRAINT ck_yeu_cau_trang_thai CHECK (trang_thai IN ('pending', 'approved', 'rejected')),
   CONSTRAINT ck_yeu_cau_ly_do CHECK (length(trim(ly_do)) > 0)
 );
@@ -48,7 +48,7 @@ ALTER TABLE yeu_cau_admin_khach_hang
   DROP CONSTRAINT IF EXISTS ck_yeu_cau_loai;
 
 ALTER TABLE yeu_cau_admin_khach_hang
-  ADD CONSTRAINT ck_yeu_cau_loai CHECK (loai IN ('lock_customer', 'delete_customer'));
+  ADD CONSTRAINT ck_yeu_cau_loai CHECK (loai IN ('lock_customer', 'unlock_customer', 'delete_customer'));
 
 CREATE INDEX IF NOT EXISTS ix_yeu_cau_admin_trang_thai_ngay
   ON yeu_cau_admin_khach_hang(trang_thai, ngay_tao DESC);

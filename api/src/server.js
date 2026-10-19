@@ -95,6 +95,9 @@ function mapDatabaseError(error) {
     return new HttpError(503, "Không kết nối được PostgreSQL. Kiểm tra dịch vụ PostgreSQL, host và cổng trong api/.env.");
   }
   if (error.code === "23505") return new HttpError(409, "Tên đăng nhập, mã thành viên hoặc dữ liệu này đã tồn tại");
+  if (error.code === "23514" && error.constraint === "ck_yeu_cau_loai") {
+    return new HttpError(503, "Database chưa cập nhật hỗ trợ mở khóa. Hãy chạy database/12_allow_unlock_customer_request.sql rồi khởi động lại API.");
+  }
   if (["23503", "23514", "22P02", "22007", "22008", "22003"].includes(error.code)) {
     return new HttpError(400, "Dữ liệu không hợp lệ hoặc vi phạm quy tắc nghiệp vụ");
   }
@@ -737,7 +740,7 @@ async function internalRoutes(request, response, method, path, body) {
            JOIN tai_khoan a ON a.id = r.nguoi_yeu_cau_id
            LEFT JOIN nhan_vien_noi_bo n ON n.tai_khoan_id = a.id
            LEFT JOIN khach_hang h ON h.tai_khoan_id = r.khach_hang_id
-           WHERE r.loai = 'lock_customer'
+           WHERE r.loai IN ('lock_customer', 'unlock_customer')
            ORDER BY (r.trang_thai = 'pending') DESC, r.ngay_tao DESC`
       )
       : await pool.query(
@@ -747,17 +750,19 @@ async function internalRoutes(request, response, method, path, body) {
                 r.ngay_quyet_dinh AS "decidedAt"
            FROM yeu_cau_admin_khach_hang r
            LEFT JOIN khach_hang h ON h.tai_khoan_id = r.khach_hang_id
-          WHERE r.nguoi_yeu_cau_id = $1 AND r.loai = 'lock_customer' ORDER BY r.ngay_tao DESC`,
+          WHERE r.nguoi_yeu_cau_id = $1 AND r.loai IN ('lock_customer', 'unlock_customer') ORDER BY r.ngay_tao DESC`,
         [session.id]
       );
     json(response, 200, { requests: result.rows });
     return true;
   }
   if (method === "POST" && path === "/internal/customer-requests") {
-    if (session.role !== "manager") throw new HttpError(403, "Chỉ Manager mới được gửi yêu cầu khóa khách hàng");
+    if (session.role !== "manager") throw new HttpError(403, "Chỉ Manager mới được gửi yêu cầu lên Admin");
     const customerId = requireInteger(body.customerId, "Mã khách hàng");
-    if (body.action != null && body.action !== "lock_customer") throw new HttpError(400, "Loại yêu cầu không hợp lệ");
-    const reason = requireValue(body.reason, "Lý do", { min: 5, max: 2000 });
+    const action = body.action || "lock_customer";
+    if (!["lock_customer", "unlock_customer"].includes(action)) throw new HttpError(400, "Loại yêu cầu không hợp lệ");
+    const isUnlock = action === "unlock_customer";
+    const reason = requireValue(body.reason, isUnlock ? "Lý do mở khóa" : "Lý do khóa", { min: 5, max: 2000 });
     const rows = await transaction(async client => {
       await client.query("SELECT crm_kiem_tra_quyen($1, ARRAY['manager']::vai_tro[])", [session.id]);
       const target = await client.query(
@@ -767,8 +772,14 @@ async function internalRoutes(request, response, method, path, body) {
         [customerId]
       );
       if (!target.rowCount) throw new HttpError(404, "Không tìm thấy khách hàng");
-      if (target.rows[0].status !== "active") {
-        throw new HttpError(409, "Chỉ có thể yêu cầu khóa khách hàng đang hoạt động");
+      if (isUnlock) {
+        if (target.rows[0].status !== "locked") {
+          throw new HttpError(409, "Chỉ có thể yêu cầu mở khóa khách hàng đang bị khóa");
+        }
+      } else {
+        if (target.rows[0].status !== "active") {
+          throw new HttpError(409, "Chỉ có thể yêu cầu khóa khách hàng đang hoạt động");
+        }
       }
       const existingRequest = await client.query(
         `SELECT id FROM yeu_cau_admin_khach_hang
@@ -776,7 +787,7 @@ async function internalRoutes(request, response, method, path, body) {
         [customerId]
       );
       if (existingRequest.rowCount) {
-        throw new HttpError(409, "Đã có yêu cầu khóa đang chờ Admin xử lý");
+        throw new HttpError(409, isUnlock ? "Đã có yêu cầu mở khóa đang chờ Admin xử lý" : "Đã có yêu cầu khóa đang chờ Admin xử lý");
       }
       const result = await client.query(
         `INSERT INTO yeu_cau_admin_khach_hang(nguoi_yeu_cau_id, khach_hang_id, khach_hang_ten, loai, ly_do)
@@ -788,7 +799,7 @@ async function internalRoutes(request, response, method, path, body) {
     if (!rows[0]) throw new HttpError(404, "Không tìm thấy khách hàng");
     json(response, 201, {
       id: rows[0].id,
-      message: "Đã gửi yêu cầu khóa đến Admin"
+      message: isUnlock ? "Đã gửi đề xuất mở khóa đến Admin" : "Đã gửi đề xuất khóa đến Admin"
     });
     return true;
   }
@@ -799,6 +810,7 @@ async function internalRoutes(request, response, method, path, body) {
     const status = body.status;
     if (!["approved", "rejected"].includes(status)) throw new HttpError(400, "Quyết định không hợp lệ");
     const note = body.note == null || body.note === "" ? null : requireValue(body.note, "Ghi chú", { min: 1, max: 2000 });
+    let resolvedAction = "lock_customer";
     await transaction(async client => {
       await client.query("SELECT crm_kiem_tra_quyen($1, ARRAY['admin']::vai_tro[])", [session.id]);
       const { rows: candidates } = await client.query(
@@ -809,7 +821,8 @@ async function internalRoutes(request, response, method, path, body) {
       const candidate = candidates[0];
       if (!candidate) throw new HttpError(404, "Không tìm thấy yêu cầu");
       if (candidate.trang_thai !== "pending") throw new HttpError(409, "Yêu cầu này đã được xử lý");
-      if (candidate.loai !== "lock_customer") throw new HttpError(409, "Loại yêu cầu này không còn được hỗ trợ");
+      if (!["lock_customer", "unlock_customer"].includes(candidate.loai)) throw new HttpError(409, "Loại yêu cầu này không còn được hỗ trợ");
+      resolvedAction = candidate.loai;
       const { rows: lockedRequests } = await client.query(
         `SELECT id, khach_hang_id, loai, trang_thai
            FROM yeu_cau_admin_khach_hang WHERE id = $1 FOR UPDATE`,
@@ -822,9 +835,10 @@ async function internalRoutes(request, response, method, path, body) {
         throw new HttpError(409, "Yêu cầu đã thay đổi; vui lòng tải lại danh sách");
       }
       if (status === "approved") {
+        const targetStatus = pending.loai === "unlock_customer" ? "active" : "locked";
         await client.query(
-          "SELECT crm_dat_trang_thai_khach_hang($1, $2, 'locked'::trang_thai_tai_khoan)",
-          [session.id, pending.khach_hang_id]
+          "SELECT crm_dat_trang_thai_khach_hang($1, $2, $3::trang_thai_tai_khoan)",
+          [session.id, pending.khach_hang_id, targetStatus]
         );
       }
       await client.query(
@@ -838,7 +852,7 @@ async function internalRoutes(request, response, method, path, body) {
     json(response, 200, {
       message: status === "rejected"
         ? "Đã từ chối yêu cầu"
-        : "Đã phê duyệt và khóa khách hàng"
+        : (resolvedAction === "unlock_customer" ? "Đã phê duyệt và mở khóa khách hàng" : "Đã phê duyệt và khóa khách hàng")
     });
     return true;
   }
