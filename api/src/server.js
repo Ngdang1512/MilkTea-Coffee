@@ -94,6 +94,7 @@ function mapDatabaseError(error) {
   if (error.code === "ECONNREFUSED" || error.code === "ETIMEDOUT") {
     return new HttpError(503, "Không kết nối được PostgreSQL. Kiểm tra dịch vụ PostgreSQL, host và cổng trong api/.env.");
   }
+  if (error.code === "23505" && error.constraint === "do_uong_ma_do_uong_key") return new HttpError(409, "Mã đồ uống đã tồn tại");
   if (error.code === "23505") return new HttpError(409, "Tên đăng nhập, mã thành viên hoặc dữ liệu này đã tồn tại");
   if (error.code === "23514" && error.constraint === "ck_yeu_cau_loai") {
     return new HttpError(503, "Database chưa cập nhật hỗ trợ mở khóa. Hãy chạy database/12_allow_unlock_customer_request.sql rồi khởi động lại API.");
@@ -197,6 +198,8 @@ async function customerRoutes(request, response, method, path, body) {
     return true;
   }
   if (method === "POST" && path === "/auth/register") {
+    const passwordConfirmation = requirePassword(body.matKhauXacNhan);
+    if (body.matKhau !== passwordConfirmation) throw new HttpError(400, "Mật khẩu xác nhận chưa khớp");
     const accountId = await transaction(client => createCustomerAccount(client, body));
     const profile = await getProfile(accountId);
     json(response, 201, { token: createToken({ id: accountId, role: "customer" }), profile });
@@ -224,11 +227,25 @@ async function customerRoutes(request, response, method, path, body) {
     json(response, 200, { profile: await getProfile(customer.id) });
     return true;
   }
+  if (method === "PATCH" && path === "/me/password") {
+    const customer = await requireCustomer(request);
+    const currentPassword = requirePassword(body.matKhauHienTai);
+    const newPassword = requirePassword(body.matKhauMoi);
+    if (currentPassword === newPassword) throw new HttpError(400, "Mật khẩu mới phải khác mật khẩu hiện tại");
+    const { rows } = await pool.query("SELECT mat_khau_hash FROM tai_khoan WHERE id = $1", [customer.id]);
+    if (!rows[0] || !(await verifyPassword(currentPassword, rows[0].mat_khau_hash))) {
+      throw new HttpError(400, "Mật khẩu hiện tại không đúng");
+    }
+    await pool.query("UPDATE tai_khoan SET mat_khau_hash = $2 WHERE id = $1", [customer.id, await hashPassword(newPassword)]);
+    json(response, 200, { message: "Đổi mật khẩu thành công" });
+    return true;
+  }
   if (path === "/me/feedback" && method === "GET") {
     const customer = await requireCustomer(request);
     const { rows } = await pool.query(
       `SELECT p.id, p.so_sao AS "soSao", p.noi_dung AS "noiDung", p.trang_thai AS "trangThai",
               p.phan_hoi_cua_nhan_vien AS "phanHoiCuaNhanVien", p.ngay_gui AS "ngayGui",
+              p.ngay_phan_hoi AS "ngayPhanHoi",
               d.ten_do_uong AS "tenDoUong"
          FROM phan_hoi p JOIN do_uong d ON d.id = p.do_uong_id
         WHERE p.khach_hang_id = $1 ORDER BY p.ngay_gui DESC`,
@@ -241,7 +258,7 @@ async function customerRoutes(request, response, method, path, body) {
     const customer = await requireCustomer(request);
     const drinkId = requireInteger(body.doUongId, "Đồ uống");
     const rating = requireInteger(body.soSao, "Số sao", 1, 5);
-    const content = requireValue(body.noiDung, "Nội dung phản hồi", { max: 5000 });
+    const content = requireValue(body.noiDung, "Nội dung phản hồi", { min: 10, max: 5000 });
     const { rows } = await pool.query(
       `INSERT INTO phan_hoi(khach_hang_id, do_uong_id, so_sao, noi_dung)
        VALUES ($1, $2, $3, $4) RETURNING id`,
@@ -297,6 +314,31 @@ async function customerRoutes(request, response, method, path, body) {
     json(response, 200, { survey: { id: survey.id, title: survey.title, questions: [...questionMap.values()] } });
     return true;
   }
+  const completedCustomerSurvey = path.match(/^\/me\/surveys\/(\d+)\/results$/);
+  if (method === "GET" && completedCustomerSurvey) {
+    const customer = await requireCustomer(request);
+    const id = requireInteger(completedCustomerSurvey[1], "Mã khảo sát");
+    const surveyResult = await pool.query(
+      `SELECT k.id, k.tieu_de AS title, k.mo_ta AS description,
+              p.ngay_hoan_thanh AS "completedAt"
+         FROM khao_sat k JOIN phan_phoi_khao_sat p ON p.khao_sat_id = k.id
+        WHERE k.id = $1 AND p.khach_hang_id = $2 AND p.ngay_hoan_thanh IS NOT NULL`,
+      [id, customer.id]
+    );
+    if (!surveyResult.rowCount) throw new HttpError(404, "Không tìm thấy kết quả khảo sát đã hoàn thành");
+    const answers = await pool.query(
+      `SELECT c.id, c.noi_dung AS content, c.bat_buoc AS required, c.thu_tu,
+              l.id AS "choiceId", l.noi_dung AS "choiceContent"
+         FROM cau_hoi c
+         LEFT JOIN cau_tra_loi a ON a.khao_sat_id = c.khao_sat_id
+          AND a.cau_hoi_id = c.id AND a.khach_hang_id = $2
+         LEFT JOIN lua_chon l ON l.id = a.lua_chon_id
+        WHERE c.khao_sat_id = $1 ORDER BY c.thu_tu`,
+      [id, customer.id]
+    );
+    json(response, 200, { survey: { ...surveyResult.rows[0], questions: answers.rows } });
+    return true;
+  }
   const submitSurvey = path.match(/^\/me\/surveys\/(\d+)\/submit$/);
   if (method === "POST" && submitSurvey) {
     const customer = await requireCustomer(request);
@@ -319,6 +361,16 @@ async function customerRoutes(request, response, method, path, body) {
       [customer.id]
     );
     json(response, 200, { notifications: rows });
+    return true;
+  }
+  if (method === "PATCH" && path === "/me/notifications/read-all") {
+    const customer = await requireCustomer(request);
+    const result = await pool.query(
+      `UPDATE thong_bao SET da_doc = true, ngay_doc = coalesce(ngay_doc, clock_timestamp())
+        WHERE tai_khoan_id = $1 AND NOT da_doc`,
+      [customer.id]
+    );
+    json(response, 200, { updated: result.rowCount });
     return true;
   }
   const notification = path.match(/^\/me\/notifications\/(\d+)$/);
@@ -489,6 +541,7 @@ async function internalRoutes(request, response, method, path, body) {
     if (!["da_xem", "da_tiep_thu"].includes(status)) throw new HttpError(400, "Trạng thái xử lý không hợp lệ");
     const reply = body.reply == null ? "" : requireValue(body.reply, "Nội dung trả lời", { min: 0, max: 2000 });
     if (reply && reply.length < 3) throw new HttpError(400, "Nội dung trả lời phải có ít nhất 3 ký tự");
+    if (status === "da_tiep_thu" && !reply) throw new HttpError(400, "Vui lòng nhập nội dung phản hồi trước khi tiếp thu");
     await transaction(async client => {
       const result = await client.query(
         `SELECT khach_hang_id FROM phan_hoi WHERE id = $1 FOR UPDATE`,
@@ -517,7 +570,7 @@ async function internalRoutes(request, response, method, path, body) {
               k.ngay_ket_thuc AS "endAt", k.da_an AS hidden,
               count(p.khach_hang_id)::int AS recipients,
               count(p.ngay_hoan_thanh)::int AS completed,
-              round(100.0 * count(p.ngay_hoan_thanh) / nullif(count(p.khach_hang_id), 0), 2) AS "completionRate"
+              coalesce(round(100.0 * count(p.ngay_hoan_thanh) / nullif(count(p.khach_hang_id), 0), 2), 0) AS "completionRate"
          FROM khao_sat k LEFT JOIN phan_phoi_khao_sat p ON p.khao_sat_id = k.id
         GROUP BY k.id ORDER BY k.ngay_tao DESC`
     );
@@ -871,6 +924,33 @@ async function internalRoutes(request, response, method, path, body) {
       pool.query(`SELECT id, ma_do_uong AS code, ten_do_uong AS name, mo_ta AS description, dang_kinh_doanh AS active FROM do_uong ORDER BY id`)
     ]);
     json(response, 200, { preferences: preferences.rows, drinks: drinks.rows });
+    return true;
+  }
+  if (method === "POST" && path === "/internal/drinks") {
+    if (!['manager', 'admin'].includes(session.role)) throw new HttpError(403, "Bạn không có quyền thêm đồ uống");
+    const code = requireValue(body.maDoUong, "Mã đồ uống", { min: 2, max: 30 }).toLocaleUpperCase();
+    if (!/^[A-Z0-9_-]+$/.test(code)) throw new HttpError(400, "Mã đồ uống chỉ gồm chữ in hoa, số, gạch ngang hoặc gạch dưới");
+    const name = requireValue(body.tenDoUong, "Tên đồ uống", { min: 2, max: 150 });
+    const description = body.moTa == null || body.moTa.trim() === "" ? null : requireValue(body.moTa, "Mô tả", { max: 1000 });
+    const { rows } = await pool.query(
+      `INSERT INTO do_uong(ma_do_uong, ten_do_uong, mo_ta, dang_kinh_doanh)
+       VALUES ($1, $2, $3, true) RETURNING id`,
+      [code, name, description]
+    );
+    json(response, 201, { id: rows[0].id, message: "Đã thêm đồ uống mới" });
+    return true;
+  }
+  const drinkStatusPath = path.match(/^\/internal\/drinks\/(\d+)\/status$/);
+  if (method === "PATCH" && drinkStatusPath) {
+    if (!["manager", "admin"].includes(session.role)) throw new HttpError(403, "Bạn không có quyền cập nhật đồ uống");
+    const id = requireInteger(drinkStatusPath[1], "Mã đồ uống");
+    if (typeof body.active !== "boolean") throw new HttpError(400, "Trạng thái kinh doanh không hợp lệ");
+    const { rowCount } = await pool.query(
+      `UPDATE do_uong SET dang_kinh_doanh = $2 WHERE id = $1`,
+      [id, body.active]
+    );
+    if (!rowCount) throw new HttpError(404, "Không tìm thấy đồ uống");
+    json(response, 200, { message: body.active ? "Đã mở bán lại đồ uống" : "Đã ngừng bán đồ uống" });
     return true;
   }
   return false;
