@@ -34,9 +34,6 @@ final class InternalController
         if ($method === 'PATCH' && preg_match('#^/internal/customers/(\d+)/status$#', $path, $matches)) {
             $this->updateCustomerStatus((int) $account['id'], (int) $matches[1], Http::body());
         }
-        if ($method === 'DELETE' && preg_match('#^/internal/customers/(\d+)$#', $path, $matches)) {
-            $this->deleteCustomer((int) $matches[1], (int) $account['id']);
-        }
         if ($method === 'GET' && $path === '/internal/reports/customers') {
             Http::json(200, $this->customerReports());
         }
@@ -227,13 +224,6 @@ final class InternalController
             'status' => $status,
         ]);
         Http::json(200, ['customer' => $this->customerById($customerId)]);
-    }
-
-    private function deleteCustomer(int $customerId, int $accountId): never
-    {
-        $statement = $this->db->prepare('SELECT crm_xoa_khach_hang(:account,:customer)');
-        $statement->execute(['account' => $accountId, 'customer' => $customerId]);
-        Http::json(200, ['message' => 'Đã xóa khách hàng']);
     }
 
     private function customerById(int $customerId): array

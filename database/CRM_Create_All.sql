@@ -477,16 +477,6 @@ BEGIN
   IF NOT FOUND THEN RAISE EXCEPTION 'Khách hàng không tồn tại'; END IF;
 END $$;
 
-CREATE FUNCTION crm_xoa_khach_hang(p_nguoi_thuc_hien bigint, p_khach_hang bigint)
-RETURNS void LANGUAGE plpgsql AS $$
-BEGIN
-  PERFORM crm_kiem_tra_quyen(p_nguoi_thuc_hien, ARRAY['admin']::vai_tro[]);
-  DELETE FROM tai_khoan WHERE id = p_khach_hang AND vai_tro = 'customer';
-  IF NOT FOUND THEN RAISE EXCEPTION 'Khách hàng không tồn tại'; END IF;
-  -- CASCADE: hồ sơ, phản hồi, phân phối và câu trả lời của đúng khách đó.
-  -- Cấu trúc khảo sát, món đồ uống, dữ liệu khách khác vẫn được giữ.
-END $$;
-
 -- Bảo vệ bài đã nộp, kể cả khi lập trình viên ghi trực tiếp vào bảng.
 CREATE FUNCTION fn_bao_ve_cau_tra_loi() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE v_ks bigint; v_kh bigint; v_da_nop timestamptz;
